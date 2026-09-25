@@ -12,7 +12,7 @@ import {
   type MediaProviderAdapter,
   type MediaPlayerInstance,
 } from "@vidstack/react";
-import { AlertTriangle, LoaderCircle } from "lucide-react";
+import { AlertTriangle, LoaderCircle, RotateCw } from "lucide-react";
 import { PlayerControls } from "./player-controls";
 import { ServerSwitcher } from "./server-switcher";
 import { SourceManager } from "@/lib/player/source-manager";
@@ -60,6 +60,7 @@ export function PlayerShell(props: Props) {
   const [phase, setPhase] = useState<Phase>("loading-servers");
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
   const [mediaError, setMediaError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const [prefs, setPrefs] = useState<PlayerPrefs>(DEFAULT_PREFS);
 
@@ -233,7 +234,7 @@ export function PlayerShell(props: Props) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.episodeId]);
+  }, [props.episodeId, reloadKey]);
 
   /* ── player events ─────────────────────────────────────────── */
 
@@ -413,12 +414,23 @@ export function PlayerShell(props: Props) {
         )}
 
         {phase === "empty" && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-ink-950/95 px-6 text-center">
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-ink-950/95 px-6 text-center">
             <p className="font-display text-lg font-bold text-white">No servers responded</p>
-            <p className="max-w-sm text-sm text-txt-muted">
-              The provider didn&apos;t return any playable sources for this episode. Try again
-              later or configure a different provider.
+            <p className="max-w-sm text-sm leading-relaxed text-txt-muted">
+              The provider didn&apos;t return playable sources for this episode — it may still be
+              scraping this title, or every server is down right now.
             </p>
+            <button
+              onClick={() => {
+                setFailedIds(new Set());
+                manager.clearFailures();
+                setReloadKey((k) => k + 1);
+              }}
+              className="mt-1 inline-flex h-10 items-center gap-2 rounded-xl bg-brand-gradient px-5 text-sm font-bold text-white shadow-glow-sm transition-all hover:shadow-glow active:scale-95"
+            >
+              <RotateCw className="h-4 w-4" aria-hidden />
+              Retry servers
+            </button>
           </div>
         )}
       </div>

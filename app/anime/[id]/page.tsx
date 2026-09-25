@@ -6,10 +6,8 @@ import { Star, CalendarDays, Sparkles, Clock3, Clapperboard } from "lucide-react
 import { getProvider } from "@/lib/anime/providers";
 import { Poster } from "@/components/anime/poster";
 import { WatchlistButton, FavoriteButton } from "@/components/anime/watchlist-button";
-import { EpisodeBrowser } from "@/components/episodes/episode-browser";
-import { EmptyState } from "@/components/states";
+import { EpisodeBrowserLazy } from "@/components/episodes/episode-browser-lazy";
 import { SITE_NAME, truncate } from "@/utils/cn";
-import type { EpisodeBundle } from "@/types/anime";
 
 export const revalidate = 600;
 
@@ -44,8 +42,6 @@ export default async function AnimeDetailsPage({ params }: Props) {
   const provider = getProvider();
   const details = await provider.getAnimeDetails(params.id).catch(() => null);
   if (!details) notFound();
-
-  const bundle: EpisodeBundle = await provider.getEpisodes(params.id).catch(() => ({ seasons: [], episodes: [] }));
 
   const backdrop = details.banner || details.image;
 
@@ -180,19 +176,7 @@ export default async function AnimeDetailsPage({ params }: Props) {
         </section>
 
         <section className="mt-10" aria-label="Episodes">
-          {bundle.episodes.length > 0 ? (
-            <EpisodeBrowser
-              animeId={details.id}
-              animeTitle={details.title}
-              seasons={bundle.seasons}
-              episodes={bundle.episodes}
-            />
-          ) : (
-            <EmptyState
-              title="No episodes listed"
-              description="This provider hasn't published an episode list for this title yet."
-            />
-          )}
+          <EpisodeBrowserLazy animeId={details.id} animeTitle={details.title} />
         </section>
       </div>
     </article>

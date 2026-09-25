@@ -12,6 +12,7 @@ import type {
 } from "@/types/anime";
 import { ProviderError } from "../errors";
 import { cached, fetchUpstream } from "../cache";
+import { cacheGet, cacheSet } from "@/lib/db/episode-cache";
 import { isDirectMedia, mediaTypeOf } from "./shared";
 import {
   ANILIST_GENRES,
@@ -130,7 +131,13 @@ function parseEpisodesResponse(json: any): ParsedEpisodes {
 }
 
 async function loadParsed(anilistId: string): Promise<ParsedEpisodes> {
-  return cached(`anivexa:parsed:${anilistId}`, 10 * 60_000, async () => {
+  const key = `anivexa:parsed:${anilistId}`;
+  return cached(key, 10 * 60_000, async () => {
+    // L2: MongoDB (survives serverless recycles — repeat visits are instant)
+    const stored = await cacheGet<StoredParsed>(key);
+    if (stored) return parsedFromDTO(stored);
+
+    // Miss: scrape through the Anivexa instance (slow first time only)
     const res = await fetchUpstream(`${base()}/episodes/${encodeURIComponent(anilistId)}`, {
       headers: { accept: "application/json" },
       timeoutMs: 55_000,
@@ -138,8 +145,35 @@ async function loadParsed(anilistId: string): Promise<ParsedEpisodes> {
     } as RequestInit);
     if (!res.ok) throw new ProviderError(`Anivexa episodes request failed (${res.status})`);
     const json = await res.json();
-    return parseEpisodesResponse(json);
+    const parsed = parseEpisodesResponse(json);
+    if (parsed.episodes.length) {
+      await cacheSet(key, parsedToDTO(parsed), 3 * 3600); // 3h
+    }
+    return parsed;
   });
+}
+
+/* Mongo-friendly DTO — the availability Map serializes as entry pairs. */
+interface StoredParsed {
+  episodes: EpisodeListItem[];
+  total: number;
+  availabilityEntries: [number, EpisodeServer[]][];
+}
+
+function parsedToDTO(p: ParsedEpisodes): StoredParsed {
+  return {
+    episodes: p.episodes,
+    total: p.total,
+    availabilityEntries: Array.from(p.availability.entries()),
+  };
+}
+
+function parsedFromDTO(d: StoredParsed): ParsedEpisodes {
+  return {
+    episodes: d.episodes,
+    total: d.total,
+    availability: new Map(d.availabilityEntries),
+  };
 }
 
 export const anivexaProvider: AnimeProvider = {
