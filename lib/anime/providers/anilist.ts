@@ -19,6 +19,8 @@ import { cleanSynopsis } from "@/lib/anime/synopsis";
 
 const ENDPOINT = "https://graphql.anilist.co";
 
+import { kuhiResolveSearch } from "./kuhi-meta";
+
 const MEDIA_FIELDS = `
   id
   idMal
@@ -46,6 +48,15 @@ query ($page: Int, $perPage: Int, $search: String, $sort: [MediaSort],
     media(type: ANIME, search: $search, sort: $sort, genre_in: $genre,
           status: $status, format: $format, startDate_greater: $startDate,
           isAdult: $isAdult) {
+      ${MEDIA_FIELDS}
+    }
+  }
+}`;
+
+const PAGE_BY_IDS_QUERY = `
+query ($ids: [Int], $perPage: Int) {
+  Page(perPage: $perPage) {
+    media(id_in: $ids, type: ANIME, sort: POPULARITY_DESC) {
       ${MEDIA_FIELDS}
     }
   }
@@ -156,6 +167,37 @@ export async function anilistAdvancedSearch(filters: SearchFilters): Promise<Sea
     startDate: filters.year ? Number(filters.year) * 10000 : undefined,
   });
   const media: any[] = data?.Page?.media ?? [];
+
+  // SEARCH FALLBACK: AniList's search misses pinyin/alternate titles
+  // ("Dubu Xiaoyao" etc). When a pure text search returns nothing, ask the
+  // configured Kuhi instance to resolve the query to AniList IDs, then load
+  // the real AniList entries. Metadata stays 100% AniList; if Kuhi is not
+  // configured or fails, this is a no-op.
+  if (
+    page === 1 &&
+    media.length === 0 &&
+    filters.query?.trim() &&
+    !filters.genres?.length &&
+    !filters.type &&
+    !filters.status &&
+    !filters.year
+  ) {
+    const ids = await kuhiResolveSearch(filters.query.trim());
+    if (ids && ids.length) {
+      const fb = await anilistQuery(PAGE_BY_IDS_QUERY, { ids, perPage });
+      const fbMedia: any[] = fb?.Page?.media ?? [];
+      if (fbMedia.length) {
+        return {
+          items: fbMedia.map(mapCard),
+          total: fbMedia.length,
+          page,
+          perPage,
+          hasNextPage: false,
+        };
+      }
+    }
+  }
+
   return {
     items: media.map(mapCard),
     total: data?.Page?.pageInfo?.total ?? media.length,
