@@ -32,7 +32,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6"
+      className="fixed inset-0 z-[80] flex items-end justify-center p-0 sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-label={title ?? "Dialog"}
@@ -45,7 +45,9 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
       <div
         ref={ref}
         className={cn(
-          "glass-strong relative z-10 w-full max-w-lg rounded-3xl p-6 shadow-card-lg animate-scale-in",
+          // Bottom-sheet on phones (thumb-reach + no clipping), centered
+          // dialog from sm up. Never taller than the viewport.
+          "glass-strong relative z-10 max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl p-6 shadow-card-lg animate-scale-in sm:rounded-3xl",
           className
         )}
       >

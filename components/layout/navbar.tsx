@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Compass, LayoutGrid, Sparkles } from "lucide-react";
+import { Compass, LayoutGrid, Search, Sparkles } from "lucide-react";
 import { Logo } from "./logo";
 import { SearchBar } from "./search-bar";
 import { UserMenu } from "./user-menu";
@@ -38,12 +38,15 @@ export function Navbar() {
     <header
       className={cn(
         "fixed inset-x-0 top-0 z-[70] transition-all duration-300 ease-premium",
+        // On phones the watch page is player-first: the player owns the top
+        // of the screen, so the whole navbar gets out of the way there.
+        isWatch && "hidden md:block",
         scrolled
           ? "glass-strong shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
           : "border-b border-transparent bg-gradient-to-b from-black/70 to-transparent"
       )}
     >
-      <nav className="container-kuro flex h-16 items-center gap-6" aria-label="Main">
+      <nav className="container-kuro flex h-16 items-center gap-3 sm:gap-6" aria-label="Main">
         <Logo className={cn(isWatch && "hidden sm:flex")} />
 
         {!isWatch && (
@@ -68,12 +71,24 @@ export function Navbar() {
         )}
 
         <div className={cn("min-w-0 flex-1", isWatch && "flex justify-end")}>
-          <div className="ml-auto w-full max-w-md">
+          {/* Full quick-search only from sm up — on phones the bottom tab
+              bar's Search page (plus this compact icon) covers it without
+              squeezing the navbar. */}
+          <div className="ml-auto hidden w-full max-w-md sm:block">
             <SearchBar />
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {!isWatch && (
+            <Link
+              href="/search"
+              aria-label="Search anime"
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-txt-muted transition-colors hover:bg-white/5 hover:text-txt sm:hidden"
+            >
+              <Search className="h-5 w-5" aria-hidden />
+            </Link>
+          )}
           <Link
             href="/watchlist"
             className={cn(

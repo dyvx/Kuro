@@ -571,7 +571,7 @@ export function PlayerControls({
             />
           </div>
 
-          <span className="ml-1 select-none text-xs font-semibold tabular-nums text-white/85 sm:text-[13px]">
+          <span className="ml-1 hidden min-[420px]:block select-none text-xs font-semibold tabular-nums text-white/85 sm:text-[13px]">
             {formatTime(currentTime)}
             <span className="text-white/45"> / {formatTime(duration)}</span>
           </span>
@@ -696,7 +696,7 @@ function CtrlButton({
       title={label}
       aria-label={label}
       className={cn(
-        "flex h-9 w-9 items-center justify-center rounded-xl text-white/85 transition-all duration-200 hover:bg-white/12 hover:text-white active:scale-90",
+        "flex h-10 w-10 items-center justify-center rounded-xl text-white/85 transition-all duration-200 hover:bg-white/12 hover:text-white active:scale-90 sm:h-9 sm:w-9",
         active && "text-primary-300",
         className
       )}
@@ -721,7 +721,7 @@ function PopMenu({
     <div className="absolute bottom-20 right-3 sm:right-4" role="menu" aria-label={title}>
       <div
         className={cn(
-          "glass-strong overflow-hidden rounded-2xl shadow-card-lg animate-scale-in",
+          "glass-strong max-w-[calc(100vw-24px)] overflow-hidden rounded-2xl shadow-card-lg animate-scale-in",
           wide ? "w-72" : "w-56"
         )}
       >

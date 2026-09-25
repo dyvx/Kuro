@@ -167,7 +167,7 @@ export function WatchlistClient() {
               <button
                 onClick={() => remove(item.animeId, item.animeTitle)}
                 aria-label={`Remove ${item.animeTitle} from watchlist`}
-                className="absolute right-2 top-2 rounded-lg bg-black/60 p-1.5 text-white/80 opacity-0 backdrop-blur-md transition-all hover:bg-crimson-500/30 hover:text-crimson-300 focus-visible:opacity-100 group-hover/wl:opacity-100"
+                className="absolute right-2 top-2 rounded-lg bg-black/60 p-1.5 text-white/80 backdrop-blur-md transition-all hover:bg-crimson-500/30 hover:text-crimson-300 focus-visible:opacity-100 sm:opacity-0 sm:group-hover/wl:opacity-100"
               >
                 <Trash2 className="h-3.5 w-3.5" aria-hidden />
               </button>

@@ -45,7 +45,7 @@ export function HeroBanner({ items }: { items: HeroAnime[] }) {
     <section
       aria-label="Featured anime"
       aria-roledescription="carousel"
-      className="relative -mt-16 h-[88svh] min-h-[540px] max-h-[820px] w-full overflow-hidden"
+      className="relative -mt-16 h-[88svh] min-h-[520px] max-h-[820px] w-full overflow-hidden"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
@@ -82,7 +82,7 @@ export function HeroBanner({ items }: { items: HeroAnime[] }) {
 
       {/* content */}
       <div className="absolute inset-0 flex items-end">
-        <div key={active.id} className="container-kuro w-full pb-16 pt-28 sm:pb-20">
+        <div key={active.id} className="container-kuro w-full pb-24 pt-24 sm:pb-20 sm:pt-28">
           <div className="max-w-2xl animate-fade-up">
             {active.featuredLabel && (
               <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary-400/30 bg-primary-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-primary-200 backdrop-blur-sm">
@@ -90,11 +90,11 @@ export function HeroBanner({ items }: { items: HeroAnime[] }) {
                 {active.featuredLabel}
               </p>
             )}
-            <h1 className="text-shadow-hero font-display text-4xl font-bold leading-[1.05] text-white sm:text-5xl lg:text-6xl">
+            <h1 className="text-shadow-hero font-display text-3xl font-bold leading-[1.05] text-white sm:text-5xl lg:text-6xl">
               {active.title}
             </h1>
             {active.japaneseTitle && (
-              <p className="mt-2 text-sm font-medium text-white/60 sm:text-base">
+              <p className="mt-2 line-clamp-1 text-sm font-medium text-white/60 sm:text-base">
                 {active.japaneseTitle}
               </p>
             )}
@@ -115,7 +115,7 @@ export function HeroBanner({ items }: { items: HeroAnime[] }) {
             </div>
 
             {active.genres && active.genres.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 hidden flex-wrap gap-2 sm:flex">
                 {active.genres.slice(0, 4).map((g) => (
                   <span
                     key={g}
@@ -128,12 +128,12 @@ export function HeroBanner({ items }: { items: HeroAnime[] }) {
             )}
 
             {active.description && (
-              <p className="text-shadow-hero mt-4 line-clamp-3 max-w-xl text-sm leading-relaxed text-white/75 sm:text-[15px]">
+              <p className="text-shadow-hero mt-4 line-clamp-2 max-w-xl text-sm leading-relaxed text-white/75 sm:line-clamp-3 sm:text-[15px]">
                 {active.description}
               </p>
             )}
 
-            <div className="mt-7 flex flex-wrap items-center gap-3">
+            <div className="mt-5 flex flex-wrap items-center gap-3 sm:mt-7">
               <Link
                 href={`/watch/${active.id}/1`}
                 className="inline-flex h-12 items-center gap-2.5 rounded-2xl bg-brand-gradient px-7 text-[15px] font-bold text-white shadow-glow transition-all duration-300 ease-premium hover:scale-[1.03] hover:shadow-glow active:scale-95"
@@ -147,7 +147,7 @@ export function HeroBanner({ items }: { items: HeroAnime[] }) {
 
           {/* slide indicators */}
           {items.length > 1 && (
-            <div className="mt-8 flex items-center gap-2" role="tablist" aria-label="Featured slides">
+            <div className="mt-5 flex items-center gap-2 sm:mt-8" role="tablist" aria-label="Featured slides">
               {items.map((it, i) => (
                 <button
                   key={it.id}
@@ -155,13 +155,17 @@ export function HeroBanner({ items }: { items: HeroAnime[] }) {
                   aria-selected={i === index}
                   aria-label={`Show ${it.title}`}
                   onClick={() => go(i)}
-                  className={cn(
-                    "h-1.5 rounded-full transition-all duration-400 ease-premium",
-                    i === index
-                      ? "w-10 bg-brand-gradient"
-                      : "w-4 bg-white/25 hover:bg-white/45"
-                  )}
-                />
+                  className="flex h-6 items-center"
+                >
+                  <span
+                    className={cn(
+                      "rounded-full transition-all duration-400 ease-premium",
+                      i === index
+                        ? "h-1.5 w-10 bg-brand-gradient"
+                        : "h-1.5 w-4 bg-white/25 hover:bg-white/45"
+                    )}
+                  />
+                </button>
               ))}
             </div>
           )}

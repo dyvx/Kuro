@@ -35,7 +35,7 @@ export function MobileNav() {
               <Link
                 href={tab.href}
                 aria-current={active ? "page" : undefined}
-                className="flex min-h-[56px] flex-col items-center justify-center gap-1 py-2"
+                className="relative flex min-h-[56px] flex-col items-center justify-center gap-1 py-2"
               >
                 <tab.icon
                   className={cn(

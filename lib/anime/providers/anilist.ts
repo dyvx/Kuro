@@ -7,6 +7,7 @@ import type {
   SearchResult,
 } from "@/types/anime";
 import { cached, fetchUpstream } from "../cache";
+import { cleanSynopsis } from "@/lib/anime/synopsis";
 
 /* ────────────────────────────────────────────────────────────────
    ANILIST GRAPHQL CLIENT (metadata only)
@@ -98,7 +99,7 @@ function mapCard(m: any): AnimeCardItem {
 export function mapDetails(m: any): AnimeDetails {
   return {
     ...mapCard(m),
-    description: (m.description ?? "").replace(/<[^>]*>/g, "").replace(/&(#?\w+);/g, " ").trim(),
+    description: cleanSynopsis(m.description),
     season: m.season ?? null,
     studio: m.studios?.nodes?.[0]?.name ?? null,
     duration: m.duration ?? null,

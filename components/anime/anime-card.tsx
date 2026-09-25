@@ -36,14 +36,14 @@ export const AnimeCard = memo(function AnimeCard({
             />
           </span>
 
-          {/* gradient veil on hover */}
+          {/* gradient veil — always on touch, hover-reveal on desktop */}
           <span
-            className="absolute inset-0 rounded-2xl bg-gradient-to-t from-black/85 via-black/10 to-transparent opacity-0 transition-opacity duration-300 group-hover/card:opacity-100"
+            className="absolute inset-0 rounded-2xl bg-gradient-to-t from-black/85 via-black/10 to-transparent opacity-100 transition-opacity duration-300 sm:opacity-0 sm:group-hover/card:opacity-100"
             aria-hidden
           />
 
-          {/* hover actions */}
-          <span className="absolute inset-x-0 bottom-0 flex translate-y-2 items-center justify-between p-3 opacity-0 transition-all duration-300 ease-premium group-hover/card:translate-y-0 group-hover/card:opacity-100">
+          {/* hover actions — always on touch, hover-reveal on desktop */}
+          <span className="absolute inset-x-0 bottom-0 flex translate-y-0 items-center justify-between p-3 opacity-100 transition-all duration-300 ease-premium sm:translate-y-2 sm:opacity-0 sm:group-hover/card:translate-y-0 sm:group-hover/card:opacity-100">
             <span className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-2.5 py-1.5 text-[11px] font-bold text-white backdrop-blur-md">
               <Play className="h-3.5 w-3.5 fill-white" aria-hidden />
               Watch
@@ -56,22 +56,22 @@ export const AnimeCard = memo(function AnimeCard({
             )}
           </span>
 
-          {/* rank badge */}
-          {rank != null && (
-            <span
-              className="pointer-events-none absolute -left-1 -top-3 select-none font-display text-[56px] font-bold leading-none rank-outline drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]"
-              aria-hidden
-            >
-              {rank}
-            </span>
-          )}
-
           {/* type chip */}
           <span className="absolute right-2 top-2 rounded-lg bg-black/55 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-white/90 backdrop-blur-md">
             {anime.type}
           </span>
         </Link>
       </div>
+
+      {/* rank badge — outside the clipping container so its top is visible */}
+      {rank != null && (
+        <span
+          className="pointer-events-none absolute -left-1 -top-3 select-none font-display text-[56px] font-bold leading-none rank-outline drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]"
+          aria-hidden
+        >
+          {rank}
+        </span>
+      )}
 
       <div className="mt-2.5 px-0.5">
         <h3 className="line-clamp-1 text-sm font-semibold text-txt transition-colors group-hover/card:text-primary-200">

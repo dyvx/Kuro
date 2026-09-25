@@ -141,7 +141,7 @@ export function HistoryClient() {
                 <button
                   onClick={() => remove(p.animeId)}
                   aria-label={`Remove ${p.animeTitle} from history`}
-                  className="rounded-lg p-2 text-txt-faint opacity-0 transition-all hover:bg-crimson-500/10 hover:text-crimson-400 focus-visible:opacity-100 group-hover/h:opacity-100"
+                  className="rounded-lg p-2 text-txt-faint transition-all hover:bg-crimson-500/10 hover:text-crimson-400 focus-visible:opacity-100 sm:opacity-0 sm:group-hover/h:opacity-100"
                 >
                   <Trash2 className="h-4 w-4" aria-hidden />
                 </button>
