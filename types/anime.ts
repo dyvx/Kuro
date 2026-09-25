@@ -1,6 +1,6 @@
 /* ── KURO anime domain types ─────────────────────────────────
    These are the normalized shapes the entire UI consumes.
-   Provider adapters (Consumet / Anify / demo) map their raw API
+   Provider adapters (Anivexa / demo) map their raw API
    responses into these structures, so the UI never depends on a
    specific upstream format. ─────────────────────────────────── */
 
@@ -138,7 +138,7 @@ export interface SearchResult {
   hasNextPage: boolean;
 }
 
-export type ProviderId = "demo" | "consumet" | "anify" | "anivexa";
+export type ProviderId = "demo" | "anivexa";
 
 /** The provider contract every adapter implements. */
 export interface AnimeProvider {

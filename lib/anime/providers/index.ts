@@ -1,8 +1,6 @@
 import type { AnimeProvider, ProviderId } from "@/types/anime";
 import { ProviderError, isProviderConfigured } from "../errors";
 import { demoProvider } from "./demo";
-import { consumetProvider } from "./consumet";
-import { anifyProvider } from "./anify";
 import { anivexaProvider } from "./anivexa";
 
 /* ────────────────────────────────────────────────────────────────
@@ -10,21 +8,23 @@ import { anivexaProvider } from "./anivexa";
    The UI only ever talks to `getProvider()`. Switching upstreams is
    a pure env-var change — no component edits required.
 
-     ANIME_PROVIDER=demo      → bundled offline catalog (default)
-     ANIME_PROVIDER=consumet  → your Consumet instance (ANIME_API_BASE_URL)
-     ANIME_PROVIDER=anify     → Anify API (ANIME_API_BASE_URL, optional key)
+     ANIME_PROVIDER=demo     → bundled offline catalog (default)
+     ANIME_PROVIDER=anivexa  → your Anivexa instance (ANIME_API_BASE_URL)
+
+   Kuhi is NOT a metadata provider — it is an additional STREAM source
+   inside the Anivexa adapter (ANIME_KUHI_BASE_URL, streaming only).
+
+   (Consumet/Anify adapters removed — APIs defunct, see git history.)
    ──────────────────────────────────────────────────────────────── */
 
 const registry: Record<ProviderId, AnimeProvider> = {
   demo: demoProvider,
-  consumet: consumetProvider,
-  anify: anifyProvider,
   anivexa: anivexaProvider,
 };
 
 export function currentProviderId(): ProviderId {
   const raw = (process.env.ANIME_PROVIDER ?? "demo").toLowerCase();
-  return (["demo", "consumet", "anify", "anivexa"] as const).includes(raw as ProviderId)
+  return (["demo", "anivexa"] as const).includes(raw as ProviderId)
     ? (raw as ProviderId)
     : "demo";
 }

@@ -22,7 +22,6 @@ import {
   anilistPage,
 } from "./anilist";
 import { getSkipTimes, type SkipWindows } from "@/lib/skip";
-import { consumetConfigured, consumetEpisode, consumetSources } from "./consumet-stream";
 import { kuhiConfigured, kuhiExtract } from "./kuhi-stream";
 
 /* ────────────────────────────────────────────────────────────────
@@ -50,7 +49,6 @@ const PROVIDER_ORDER = [
 ] as const;
 
 const PROVIDER_LABELS: Record<string, string> = {
-  consumet: "Consumet",
   anizone: "AniZone",
   animegg: "AnimeGG",
   anikoto: "AniKoto",
@@ -180,37 +178,6 @@ function parsedFromDTO(d: StoredParsed): ParsedEpisodes {
   };
 }
 
-/** Consumet streams shaped like Anivexa `streams` entries so both paths
-    share the same proxy + skip-window build inside getStreamingSources. */
-async function consumetStreamsShaped(
-  animeId: string,
-  number: number,
-  lang: "sub" | "dub"
-): Promise<any[]> {
-  const info = await consumetEpisode(animeId, number, lang);
-  if (!info?.episodeId) {
-    throw new ProviderError("Consumet has no stream for this episode.", 404);
-  }
-  const sources = await consumetSources(info.episodeId);
-  return sources.map((s, i) => ({
-    url: s.url,
-    quality: s.quality,
-    server: `Consumet · ${lang.toUpperCase()}`,
-    referer: s.referer,
-    hls: s.type === "hls",
-    priority: -i,
-  }));
-}
-
-async function consumetHasEpisodeSafe(animeId: string, number: number): Promise<boolean> {
-  try {
-    const info = await consumetEpisode(animeId, number, "sub");
-    return Boolean(info?.exists);
-  } catch {
-    return false;
-  }
-}
-
 /** Kuhi streams shaped like Anivexa `streams` entries so they share the
     same proxy + skip-window build inside getStreamingSources. */
 async function kuhiStreamsShaped(
@@ -235,11 +202,11 @@ async function kuhiStreamsShaped(
 }
 
 /** "Best source for this anime" memory: Anivexa is preferred; when it
-    fails and Consumet rescues the episode, the preference flips to
-    Consumet for 7 days (servers list order + default pick). */
+    fails and Kuhi rescues the episode, the preference flips to Kuhi for
+    7 days (servers list order + default pick). */
 async function markStreamPref(
   animeId: string,
-  pref: "anivexa" | "consumet" | "kuhi"
+  pref: "anivexa" | "kuhi"
 ): Promise<void> {
   try {
     await cacheSet(`streampref:${animeId}`, pref, 7 * 24 * 3600);
@@ -336,26 +303,6 @@ export const anivexaProvider: AnimeProvider = {
         servers = [...servers, ...kuhiEntries];
       }
     }
-    // Consumet shows up as an extra server when configured. Budget-capped
-    // so a slow Consumet instance can never slow the servers list down.
-    if (consumetConfigured()) {
-      try {
-        const has = await Promise.race([
-          consumetHasEpisodeSafe(animeId, number),
-          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
-        ]);
-        if (has) {
-          const entry: EpisodeServer = {
-            id: "consumet:sub",
-            name: "Consumet · SUB",
-            available: true,
-            category: "sub",
-          };
-          const pref = await cacheGet<string>(`streampref:${animeId}`).catch(() => null);
-          servers = pref === "consumet" ? [entry, ...servers] : [...servers, entry];
-        }
-      } catch { /* enhancement only */ }
-    }
     return servers;
   },
 
@@ -385,19 +332,13 @@ export const anivexaProvider: AnimeProvider = {
       }
     })();
 
-    // When the user explicitly picked a Consumet server (or Anivexa is being
-    // auto-failed-over), streams come from Consumet instead of /watch.
-    const consumetRequested = provider === "consumet";
+    // When the user explicitly picked a Kuhi server (or Anivexa is being
+    // auto-failed-over), streams come from Kuhi instead of /watch.
     const kuhiRequested = provider === "kuhi";
 
     let json: any;
     try {
-      if (consumetRequested) {
-        json = {
-          streams: await consumetStreamsShaped(animeId, number, lang === "dub" ? "dub" : "sub"),
-          audio: lang,
-        };
-      } else if (kuhiRequested) {
+      if (kuhiRequested) {
         json = {
           streams: await kuhiStreamsShaped(animeId, number, lang === "dub" ? "dub" : "sub"),
           audio: lang,
@@ -412,17 +353,10 @@ export const anivexaProvider: AnimeProvider = {
       }
     } catch (err) {
       // AUTO-FAILOVER ("pick the best source for this anime"): when Anivexa
-      // cannot serve an episode and a Consumet instance is configured, try
-      // it once and remember it as this anime's preferred source for 7 days.
-      // Pure enhancement — without ANIME_CONSUMET_BASE_URL nothing changes.
-      if (!consumetRequested && !kuhiRequested && consumetConfigured()) {
-        try {
-          const fallback = await this.getStreamingSources(episodeId, "consumet:sub", animeId);
-          void markStreamPref(animeId, "consumet");
-          return fallback;
-        } catch { /* try the next source */ }
-      }
-      if (!consumetRequested && !kuhiRequested && kuhiConfigured()) {
+      // cannot serve an episode and a Kuhi instance is configured, try it
+      // once and remember it as this anime's preferred source for 7 days.
+      // Pure enhancement — without ANIME_KUHI_BASE_URL nothing changes.
+      if (!kuhiRequested && kuhiConfigured()) {
         try {
           const fallback = await this.getStreamingSources(episodeId, "kuhi:sub", animeId);
           void markStreamPref(animeId, "kuhi");
@@ -486,14 +420,7 @@ export const anivexaProvider: AnimeProvider = {
     }
 
     if (!sources.length) {
-      if (!consumetRequested && !kuhiRequested && consumetConfigured()) {
-        try {
-          const fallback = await this.getStreamingSources(episodeId, "consumet:sub", animeId);
-          void markStreamPref(animeId, "consumet");
-          return fallback;
-        } catch { /* try the next source */ }
-      }
-      if (!consumetRequested && !kuhiRequested && kuhiConfigured()) {
+      if (!kuhiRequested && kuhiConfigured()) {
         try {
           const fallback = await this.getStreamingSources(episodeId, "kuhi:sub", animeId);
           void markStreamPref(animeId, "kuhi");
@@ -521,10 +448,9 @@ export const anivexaProvider: AnimeProvider = {
       /* skip data must never break source resolution */
     }
     // Anivexa served this episode → it is the "best source" again.
-    if (!consumetRequested && !kuhiRequested) {
+    if (!kuhiRequested) {
       void cacheGet<string>(`streampref:${animeId}`)
         .then((pref) => {
-          if (pref === "consumet") return markStreamPref(animeId, "anivexa");
           return undefined;
         })
         .catch(() => undefined);
