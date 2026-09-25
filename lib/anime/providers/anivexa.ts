@@ -305,14 +305,24 @@ export const anivexaProvider: AnimeProvider = {
     for (const st of streams) {
       const srcUrl = String(st.url ?? "");
       if (!srcUrl || st.type === "embed" || !isDirectMedia(srcUrl)) continue;
+
+      // Provider CDNs typically lock CORS to their own player and serve
+      // decoys to other origins. Route playback through our own /api/stream
+      // proxy, which attaches the Referer the provider told us to use.
+      const referer = String(st.referer ?? "");
+      const playUrl = `/api/stream?u=${encodeURIComponent(srcUrl)}${
+        referer ? `&r=${encodeURIComponent(referer)}` : ""
+      }`;
+
       sources.push({
         id: `${provider}-${sources.length}`,
         name: String(st.server ?? PROVIDER_LABELS[provider] ?? provider),
-        url: srcUrl,
+        url: playUrl,
+        originalUrl: srcUrl,
         type: mediaTypeOf(srcUrl),
         quality: st.quality ? String(st.quality) : undefined,
         category: (json.audio ?? lang) as VideoSource["category"],
-        headers: st.referer ? { Referer: String(st.referer) } : undefined,
+        headers: referer ? { Referer: referer } : undefined,
         subtitles: subtitles.length ? subtitles : undefined,
       });
       // One quality-tier per server keeps the switcher clean; hls.js adapts.

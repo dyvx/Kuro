@@ -23,6 +23,8 @@ export interface VideoSource {
   /** Human-facing server/source name, e.g. "Vidcloud". */
   name: string;
   url: string;
+  /** The un-proxied media URL (used for validation/diagnostics). */
+  originalUrl?: string;
   type: "hls" | "mp4";
   quality?: string;
   subtitles?: SubtitleTrack[];

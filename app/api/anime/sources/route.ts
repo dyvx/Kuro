@@ -22,7 +22,11 @@ export async function GET(req: Request) {
   try {
     const provider = getProvider();
     const sources = await provider.getStreamingSources(episodeId, serverId, animeId);
-    const direct = sources.filter((s) => /^https?:\/\//i.test(s.url) && /\.(m3u8|mp4)(\?|$)/i.test(s.url));
+    // Validate the underlying media URL (proxied play URLs are app-relative).
+    const direct = sources.filter((s) => {
+      const check = s.originalUrl ?? s.url;
+      return /^https?:\/\//i.test(check) && /\.(m3u8|mp4)(\?|$)/i.test(check);
+    });
     if (!direct.length) {
       return NextResponse.json(
         { sources: [], error: "This server only provides an embed page (unsupported)." },

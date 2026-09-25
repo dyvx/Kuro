@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getProvider } from "@/lib/anime/providers";
 import { PlayerShell } from "@/components/player/player-shell";
 import { EpisodePanel } from "@/components/episodes/episode-panel";
@@ -44,6 +44,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function WatchPage({ params }: Props) {
+  // Canonicalize "/watch/id/3" → "/watch/id/ep-3" so Start Watching lands
+  // on the fast path (no provider scrape) with a consistent episode id.
+  if (/^\d+$/.test(params.episodeId)) {
+    redirect(`/watch/${params.animeId}/ep-${params.episodeId}`);
+  }
+
   const provider = getProvider();
   const details = await provider.getAnimeDetails(params.animeId).catch(() => null);
   if (!details) notFound();

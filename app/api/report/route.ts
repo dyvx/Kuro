@@ -32,6 +32,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[kuro] report failed:", err);
-    return NextResponse.json({ error: "Could not submit report." }, { status: 500 });
+    // Stored reports are best-effort — don't hard-fail the UI on DB errors.
+    return NextResponse.json({ ok: false, error: "Report could not be stored." }, { status: 200 });
   }
 }

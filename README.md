@@ -108,6 +108,15 @@ per-provider episode pools: every provider × audio track becomes a server in
 the switcher (grouped under SUB / DUB tabs), and only direct `.m3u8`/`.mp4`
 streams are ever handed to the player — `type: "embed"` responses are dropped.
 
+**Stream proxy (`/api/stream`)** — provider CDNs lock CORS to their own embed
+players and serve decoy responses to foreign origins, so direct browser
+playback is impossible. KURO therefore routes all media through its own
+origin: the proxy fetches upstream server-side with the provider's required
+`Referer`, sniffs the payload (CDNs mislabel playlists as `image/jpeg`),
+rewrites every HLS URI to stay inside the proxy, passes byte `Range` headers
+through for seeking, and 502s obvious decoys. The player only ever talks to
+same-origin URLs; no iframes, no third-party player pages.
+
 The Consumet adapter **aggressively filters for direct media URLs** (`isDirectMedia`): `.m3u8` / `.mp4` responses are kept; iframe/embed pages are flagged `embedOnly` and removed from the server switcher, keeping the app ad-free.
 
 ### Using a self-hosted Consumet instance

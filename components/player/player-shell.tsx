@@ -316,7 +316,7 @@ export function PlayerShell(props: Props) {
   const reportBroken = useCallback(async () => {
     if (!activeServerId) return;
     try {
-      await fetch("/api/report", {
+      const res = await fetch("/api/report", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -325,9 +325,14 @@ export function PlayerShell(props: Props) {
           serverId: activeServerId,
         }),
       });
-      toast("Reported — thank you. Try another server meanwhile.", "success");
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.ok) {
+        toast("Reported — thank you. Try another server meanwhile.", "success");
+      } else {
+        toast("Try another server — the report couldn't be stored.", "info");
+      }
     } catch {
-      toast("Could not submit the report.", "error");
+      toast("Try another server — the report couldn't be stored.", "info");
     }
   }, [activeServerId, props.animeId, props.episodeId, toast]);
 
