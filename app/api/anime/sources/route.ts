@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getProvider, ProviderError } from "@/lib/anime/providers";
 
 export const dynamic = "force-dynamic";
+// Allow enough time for upstream provider cold-starts / first extractions (Vercel max).
+export const maxDuration = 60;
 
 /**
  * Extracts direct .m3u8/.mp4 sources for a specific server.

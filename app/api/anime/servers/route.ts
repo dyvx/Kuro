@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getProvider } from "@/lib/anime/providers";
 
 export const dynamic = "force-dynamic";
+// Allow enough time for upstream provider cold-starts / first extractions (Vercel max).
+export const maxDuration = 60;
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);

@@ -133,7 +133,7 @@ async function loadParsed(anilistId: string): Promise<ParsedEpisodes> {
   return cached(`anivexa:parsed:${anilistId}`, 10 * 60_000, async () => {
     const res = await fetchUpstream(`${base()}/episodes/${encodeURIComponent(anilistId)}`, {
       headers: { accept: "application/json" },
-      timeoutMs: 45_000,
+      timeoutMs: 55_000,
       retries: 0,
     } as RequestInit);
     if (!res.ok) throw new ProviderError(`Anivexa episodes request failed (${res.status})`);
@@ -234,7 +234,7 @@ export const anivexaProvider: AnimeProvider = {
     try {
       const res = await fetchUpstream(url, {
         headers: { accept: "application/json" },
-        timeoutMs: 45_000,
+        timeoutMs: 55_000,
         retries: 0,
       } as RequestInit);
       json = await res.json();
