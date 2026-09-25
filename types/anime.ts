@@ -35,6 +35,8 @@ export interface VideoSource {
   intro?: TimeWindow;
   /** Ending theme window (seconds) for the Skip Outro feature, when known. */
   outro?: TimeWindow;
+  /** Recap window (seconds), when known (AniSkip `recap`). */
+  recap?: TimeWindow;
 }
 
 /** A selectable server slot for an episode. */
@@ -78,6 +80,8 @@ export interface AnimeCardItem {
 /** Full detail shape for /anime/[id]. */
 export interface AnimeDetails extends AnimeCardItem {
   description: string;
+  /** MyAnimeList id (AniList `idMal`) — used by skip-time providers. */
+  malId?: number | null;
   season?: string | null;
   studio?: string | null;
   duration?: number | null;

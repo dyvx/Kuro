@@ -21,6 +21,7 @@ import {
   anilistFallbackEpisodes,
   anilistPage,
 } from "./anilist";
+import { getSkipTimes, type SkipWindows } from "@/lib/skip";
 
 /* ────────────────────────────────────────────────────────────────
    ANIVEXA ADAPTER
@@ -264,6 +265,21 @@ export const anivexaProvider: AnimeProvider = {
       animeId
     )}/${encodeURIComponent(lang)}/${encodeURIComponent(provider)}-${number}`;
 
+    // Skip times (AniSkip) load IN PARALLEL with the extraction request so
+    // they add zero playback latency. Purely best-effort: any failure → no
+    // skip data, playback unaffected.
+    const skipPromise: Promise<SkipWindows | null> = (async () => {
+      try {
+        const details = await anilistDetails(animeId);
+        const malId = details?.malId ?? null;
+        if (!malId) return null;
+        const episodeLengthSeconds = details?.duration ? details.duration * 60 : null;
+        return await getSkipTimes(malId, number, episodeLengthSeconds);
+      } catch {
+        return null;
+      }
+    })();
+
     let json: any;
     try {
       const res = await fetchUpstream(url, {
@@ -334,6 +350,21 @@ export const anivexaProvider: AnimeProvider = {
         "This server only returned an embed player (unsupported) or failed to extract a direct stream.",
         404
       );
+    }
+
+    // Attach skip windows (intro/outro/recap) if AniSkip had data. The
+    // player already renders these data-driven; null changes nothing.
+    try {
+      const skip = await skipPromise;
+      if (skip) {
+        for (const src of sources) {
+          if (skip.intro) src.intro = skip.intro;
+          if (skip.outro) src.outro = skip.outro;
+          if (skip.recap) src.recap = skip.recap;
+        }
+      }
+    } catch {
+      /* skip data must never break source resolution */
     }
     return sources;
   },

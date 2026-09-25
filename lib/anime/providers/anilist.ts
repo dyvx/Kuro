@@ -21,6 +21,7 @@ const ENDPOINT = "https://graphql.anilist.co";
 
 const MEDIA_FIELDS = `
   id
+  idMal
   title { romaji english native }
   coverImage { extraLarge large color }
   bannerImage
@@ -100,6 +101,7 @@ export function mapDetails(m: any): AnimeDetails {
   return {
     ...mapCard(m),
     description: cleanSynopsis(m.description),
+    malId: typeof m.idMal === "number" ? m.idMal : null,
     season: m.season ?? null,
     studio: m.studios?.nodes?.[0]?.name ?? null,
     duration: m.duration ?? null,

@@ -47,6 +47,7 @@ interface ControlsProps {
   sourceKey?: string | null;
   introWindow?: TimeWindow | null;
   outroWindow?: TimeWindow | null;
+  recapWindow?: TimeWindow | null;
   nextHref?: string | null;
 }
 
@@ -64,6 +65,7 @@ export function PlayerControls({
   sourceKey,
   introWindow,
   outroWindow,
+  recapWindow,
   nextHref,
 }: ControlsProps) {
   const { toast } = useToast();
@@ -136,10 +138,20 @@ export function PlayerControls({
     }
   }, [currentTime, canPlay, prefs.autoSkipIntro, prefs.autoSkipOutro, introWindow, outroWindow, sourceKey, nextHref, mediaRef]);
 
+  const skipRecapNow = useCallback(() => {
+    const p = mediaRef.current;
+    if (!p || !recapWindow) return;
+    p.currentTime = recapWindow.end;
+  }, [mediaRef, recapWindow]);
+
   const showSkipIntro =
     Boolean(introWindow) &&
     currentTime >= (introWindow?.start ?? 0) &&
     currentTime <= (introWindow?.end ?? 0) - 0.75;
+  const showSkipRecap =
+    Boolean(recapWindow) &&
+    currentTime >= (recapWindow?.start ?? 0) &&
+    currentTime <= (recapWindow?.end ?? 0) - 0.75;
   const inOutroWindow =
     Boolean(outroWindow) && currentTime >= (outroWindow?.start ?? Infinity);
   const nearEnd = duration > 0 && currentTime / duration > 0.93;
@@ -438,7 +450,7 @@ export function PlayerControls({
   return (
     <>
       {/* Skip layer — visible independently of the auto-hiding control bar */}
-      {(showSkipIntro || showNext) && (
+      {(showSkipIntro || showSkipRecap || showNext) && (
         <div className="absolute bottom-[84px] right-3 z-20 flex flex-col items-end gap-2 sm:right-4 animate-fade-up">
           {showSkipIntro && (
             <button
@@ -446,6 +458,15 @@ export function PlayerControls({
               className="glass-strong group/skip flex min-h-[44px] items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold text-white shadow-card transition-all duration-200 ease-premium hover:border-primary-400/60 hover:text-primary-200 active:scale-95"
             >
               Skip Intro
+              <FastForward className="h-4 w-4 transition-transform group-hover/skip:translate-x-0.5" aria-hidden />
+            </button>
+          )}
+          {showSkipRecap && !showSkipIntro && (
+            <button
+              onClick={skipRecapNow}
+              className="glass-strong group/skip flex min-h-[44px] items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold text-white shadow-card transition-all duration-200 ease-premium hover:border-primary-400/60 hover:text-primary-200 active:scale-95"
+            >
+              Skip Recap
               <FastForward className="h-4 w-4 transition-transform group-hover/skip:translate-x-0.5" aria-hidden />
             </button>
           )}

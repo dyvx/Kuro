@@ -432,6 +432,7 @@ export function PlayerShell(props: Props) {
           sourceKey={source?.id ?? null}
           introWindow={source?.intro ?? null}
           outroWindow={source?.outro ?? null}
+          recapWindow={source?.recap ?? null}
           nextHref={props.nextHref}
         />
 
