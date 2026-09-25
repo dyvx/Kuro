@@ -7,6 +7,7 @@ import { Bookmark, CheckCircle2, Heart, LogOut, Clock3, Play, History } from "lu
 import { Button } from "@/components/ui/button";
 import { LoadingState } from "@/components/states";
 import { loadPrefs, savePrefs, type PlayerPrefs } from "@/lib/player/player-types";
+import { AIAdminSettings } from "@/components/ai/ai-admin-settings";
 
 interface Stats {
   watching: number;
@@ -118,6 +119,8 @@ export function ProfileClient() {
           When an episode ends, jump straight into the next one. You can also toggle this from the
           player settings menu.
         </p>
+
+      <AIAdminSettings />
       </section>
 
       <section className="mt-6 flex flex-wrap gap-3">
