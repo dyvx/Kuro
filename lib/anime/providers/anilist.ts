@@ -40,12 +40,12 @@ const MEDIA_FIELDS = `
 const PAGE_QUERY = `
 query ($page: Int, $perPage: Int, $search: String, $sort: [MediaSort],
        $genre: [String], $status: MediaStatus, $format: MediaFormat,
-       $startDate: FuzzyDateInt) {
+       $startDate: FuzzyDateInt, $isAdult: Boolean) {
   Page(page: $page, perPage: $perPage) {
     pageInfo { total hasNextPage }
     media(type: ANIME, search: $search, sort: $sort, genre_in: $genre,
           status: $status, format: $format, startDate_greater: $startDate,
-          isAdult: false) {
+          isAdult: $isAdult) {
       ${MEDIA_FIELDS}
     }
   }
@@ -146,6 +146,9 @@ export async function anilistAdvancedSearch(filters: SearchFilters): Promise<Sea
     page,
     perPage,
     search: filters.query?.trim() || undefined,
+    // Adult titles (e.g. Overflow) are hidden from browse/sections but surface
+    // when the user actively searches. undefined (omitted) = AniList default = all.
+    isAdult: filters.query?.trim() ? undefined : false,
     sort: sortToQuery(filters.sort),
     genre: filters.genres?.length ? filters.genres : undefined,
     status: filters.status ? STATUS_FORMATS[filters.status] : undefined,
@@ -168,7 +171,7 @@ export async function anilistPage(
   perPage = 20,
   extra: Record<string, unknown> = {}
 ): Promise<AnimeCardItem[]> {
-  const data = await anilistQuery(PAGE_QUERY, { page, perPage, sort, ...extra });
+  const data = await anilistQuery(PAGE_QUERY, { page, perPage, sort, isAdult: false, ...extra });
   return ((data?.Page?.media ?? []) as any[]).map(mapCard);
 }
 
