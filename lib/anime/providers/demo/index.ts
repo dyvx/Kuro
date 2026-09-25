@@ -72,29 +72,33 @@ const STREAMS = [
     id: "vidcloud",
     url: "https://stream.mux.com/v69RSHhFelSm4701snP22dYz2jICy4E4FUyk02rW4gxRM.m3u8",
     quality: "1080p",
+    category: "sub" as const,
   },
   {
     name: "MegaPlay",
     id: "megaplay",
     url: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
     quality: "1080p",
+    category: "dub" as const,
   },
   {
     name: "NovaStream",
     id: "novastream",
     url: "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8",
     quality: "1080p",
+    category: "sub" as const,
   },
   {
     name: "FileVault",
     id: "filevault",
     url: "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_2MB.mp4",
     quality: "720p",
+    category: "dub" as const,
   },
 ];
 
 /* Intentionally unreachable — lets users see the manual failure flow. */
-const BROKEN_SERVER: EpisodeServer = { id: "stormhost", name: "StormHost", available: true };
+const BROKEN_SERVER: EpisodeServer = { id: "stormhost", name: "StormHost", available: true, category: "sub" };
 
 /* Embed-only source — must be omitted from the UI (spec: pirate mode). */
 const EMBED_SERVER: EpisodeServer = { id: "kuro-embed", name: "KuroFrame", embedOnly: true, available: true };
@@ -197,7 +201,7 @@ function serversFor(episodeId: string): EpisodeServer[] {
   const h = hashString(episodeId);
   const rotated = [...STREAMS.slice(h % STREAMS.length), ...STREAMS.slice(0, h % STREAMS.length)];
   return [
-    ...rotated.map((s) => ({ id: s.id, name: s.name, available: true })),
+    ...rotated.map((s) => ({ id: s.id, name: s.name, available: true, category: s.category })),
     BROKEN_SERVER,
     EMBED_SERVER,
   ];
@@ -228,6 +232,11 @@ function sourcesFor(episodeId: string, serverId?: string): VideoSource[] {
       url: stream.url,
       type: mediaTypeOf(stream.url) as VideoSource["type"],
       quality: stream.quality,
+      category: stream.category,
+      // Demo skip-intro window (plus a tiny outro on the short clip) so the
+      // skip UI is exercisable without a provider that reports OP/ED times.
+      intro: { start: 0.5, end: 4 },
+      outro: stream.id === "filevault" ? { start: 8, end: 10 } : undefined,
       subtitles: [DEMO_SUBTITLE],
     },
   ];

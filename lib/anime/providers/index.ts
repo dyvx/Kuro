@@ -3,6 +3,7 @@ import { ProviderError, isProviderConfigured } from "../errors";
 import { demoProvider } from "./demo";
 import { consumetProvider } from "./consumet";
 import { anifyProvider } from "./anify";
+import { anivexaProvider } from "./anivexa";
 
 /* ────────────────────────────────────────────────────────────────
    PROVIDER REGISTRY
@@ -18,11 +19,12 @@ const registry: Record<ProviderId, AnimeProvider> = {
   demo: demoProvider,
   consumet: consumetProvider,
   anify: anifyProvider,
+  anivexa: anivexaProvider,
 };
 
 export function currentProviderId(): ProviderId {
   const raw = (process.env.ANIME_PROVIDER ?? "demo").toLowerCase();
-  return (["demo", "consumet", "anify"] as const).includes(raw as ProviderId)
+  return (["demo", "consumet", "anify", "anivexa"] as const).includes(raw as ProviderId)
     ? (raw as ProviderId)
     : "demo";
 }

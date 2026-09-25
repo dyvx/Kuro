@@ -1,0 +1,296 @@
+import type {
+  AnimeCardItem,
+  AnimeDetails,
+  AnimeProvider,
+  EpisodeBundle,
+  EpisodeListItem,
+  EpisodeServer,
+  SearchFilters,
+  SearchResult,
+  SubtitleTrack,
+  VideoSource,
+} from "@/types/anime";
+import { ProviderError } from "../errors";
+import { cached, fetchUpstream } from "../cache";
+import { isDirectMedia, mediaTypeOf } from "./shared";
+import {
+  ANILIST_GENRES,
+  anilistAdvancedSearch,
+  anilistDetails,
+  anilistFallbackEpisodes,
+  anilistPage,
+} from "./anilist";
+
+/* ────────────────────────────────────────────────────────────────
+   ANIVEXA ADAPTER
+   Metadata: AniList GraphQL (ids are raw AniList ids, e.g. "16498")
+   Episodes/streams: YOUR self-hosted Anivexa-API instance
+   (https://github.com/walterwhite-69/Anivexa-API — run it on
+   Render/Railway/VPS, set ANIME_API_BASE_URL).
+
+   Anivexa aggregates many streaming providers, each exposing
+   sub/dub episode pools. Those become KURO "servers":
+     server id  =  "<provider>:<lang>"      e.g. "anizone:sub"
+     episode id =  "ep-<number>"            e.g. "ep-3"
+   Only direct .m3u8/.mp4 streams are surfaced; `type: "embed"`
+   entries from the API are dropped (ad-free guarantee).
+   ──────────────────────────────────────────────────────────────── */
+
+const base = () => (process.env.ANIME_API_BASE_URL ?? "").replace(/\/+$/, "");
+
+/** Preferred order when building the merged episode list. */
+const PROVIDER_ORDER = [
+  "anizone", "animegg", "anikoto", "anineko", "reanime", "aniwaves",
+  "mkissa", "anidbapp", "animenosub", "anibd", "senshi", "kaa",
+  "animedunya", "animeonsen",
+] as const;
+
+const PROVIDER_LABELS: Record<string, string> = {
+  anizone: "AniZone",
+  animegg: "AnimeGG",
+  anikoto: "AniKoto",
+  anineko: "AniNeko",
+  reanime: "ReAnime",
+  aniwaves: "AniWaves",
+  mkissa: "MKissa",
+  anidbapp: "AniDB App",
+  animenosub: "AnimeNoSub",
+  anibd: "AniBD",
+  senshi: "Senshi",
+  kaa: "KickAssAnime",
+  animedunya: "AnimeDunya",
+  animeonsen: "AnimeOnsen",
+};
+
+const LANG_LABELS: Record<string, string> = { sub: "SUB", dub: "DUB", raw: "RAW" };
+
+interface ParsedEpisodes {
+  episodes: EpisodeListItem[];
+  /** episodeNumber -> server ids that can play it */
+  availability: Map<number, EpisodeServer[]>;
+  total: number;
+}
+
+
+function parseEpisodesResponse(json: any): ParsedEpisodes {
+  const availability = new Map<number, EpisodeServer[]>();
+  const meta = new Map<number, Partial<EpisodeListItem>>();
+  let total = 0;
+
+  for (const provider of PROVIDER_ORDER) {
+    const entry = json?.[provider];
+    const lists = entry?.episodes;
+    if (!lists || typeof lists !== "object") continue; // provider errored / offline
+
+    for (const lang of ["sub", "dub", "raw"] as const) {
+      const list: any[] = Array.isArray(lists[lang]) ? lists[lang] : [];
+      for (const raw of list) {
+        const number = Number(raw.number ?? raw.episodeNumber ?? raw.episode);
+        if (!Number.isFinite(number) || number < 1) continue;
+        total = Math.max(total, number);
+
+        const serverId = `${provider}:${lang}`;
+        const servers = availability.get(number) ?? [];
+        if (!servers.some((s) => s.id === serverId)) {
+          servers.push({
+            id: serverId,
+            name: `${PROVIDER_LABELS[provider] ?? provider} · ${LANG_LABELS[lang] ?? lang}`,
+            category: lang,
+            available: true,
+          });
+          availability.set(number, servers);
+        }
+
+        if (!meta.has(number) || (!meta.get(number)?.title && (raw.title || raw.description))) {
+          meta.set(number, {
+            title: raw.title ?? undefined,
+            filler: Boolean(raw.filler),
+            duration: raw.duration ? Number(raw.duration) || undefined : undefined,
+            image: raw.image ?? undefined,
+          });
+        }
+      }
+    }
+  }
+
+  const episodes: EpisodeListItem[] = Array.from({ length: total }, (_, i) => {
+    const number = i + 1;
+    const m = meta.get(number) ?? {};
+    return {
+      id: `ep-${number}`,
+      number,
+      title: m.title ?? null,
+      filler: m.filler ?? false,
+      duration: m.duration ?? null,
+      image: m.image ?? null,
+    };
+  });
+
+  return { episodes, availability, total };
+}
+
+async function loadParsed(anilistId: string): Promise<ParsedEpisodes> {
+  return cached(`anivexa:parsed:${anilistId}`, 10 * 60_000, async () => {
+    const res = await fetchUpstream(`${base()}/episodes/${encodeURIComponent(anilistId)}`, {
+      headers: { accept: "application/json" },
+      timeoutMs: 45_000,
+      retries: 0,
+    } as RequestInit);
+    if (!res.ok) throw new ProviderError(`Anivexa episodes request failed (${res.status})`);
+    const json = await res.json();
+    return parseEpisodesResponse(json);
+  });
+}
+
+export const anivexaProvider: AnimeProvider = {
+  id: "anivexa",
+  displayName: "Anivexa",
+
+  async searchAnime(query, page = 1, perPage = 24) {
+    return anilistAdvancedSearch({ query, page, perPage, sort: "TRENDING" });
+  },
+
+  async advancedSearch(filters) {
+    return anilistAdvancedSearch(filters);
+  },
+
+  async getTrendingAnime(page = 1, perPage = 20) {
+    return anilistPage(["TRENDING_DESC"], page, perPage);
+  },
+
+  async getPopularAnime(page = 1, perPage = 20) {
+    return anilistPage(["POPULARITY_DESC"], page, perPage);
+  },
+
+  async getRecentlyUpdated(page = 1, perPage = 20) {
+    return anilistPage(["UPDATED_AT_DESC"], page, perPage, { status: "RELEASING" });
+  },
+
+  async getRecentlyAdded(page = 1, perPage = 20) {
+    return anilistPage(["START_DATE_DESC"], page, perPage);
+  },
+
+  async getMostWatched(page = 1, perPage = 20) {
+    return anilistPage(["POPULARITY_DESC"], page + 2, perPage);
+  },
+
+  async getByGenre(genre, page = 1, perPage = 20) {
+    return anilistPage(["POPULARITY_DESC"], page, perPage, { genre: [genre] });
+  },
+
+  async getGenres() {
+    return ANILIST_GENRES.map((name) => ({ name, count: 0 }));
+  },
+
+  async getAnimeDetails(id) {
+    return anilistDetails(id);
+  },
+
+  async getEpisodes(id): Promise<EpisodeBundle> {
+    const details = await anivexaProvider.getAnimeDetails(id);
+    try {
+      const parsed = await loadParsed(id);
+      if (parsed.episodes.length) {
+        return {
+          seasons: [{ id: "1", name: "All Episodes", episodeCount: parsed.episodes.length }],
+          episodes: parsed.episodes,
+        };
+      }
+    } catch {
+      /* fall back to a bare numbered list below */
+    }
+    const fallback = details ? anilistFallbackEpisodes(details) : { seasons: [], episodes: [] };
+    return fallback;
+  },
+
+  async findEpisodeId(animeId, episodeNumber) {
+    const { episodes } = await anivexaProvider.getEpisodes(animeId);
+    return episodes.some((e) => e.number === episodeNumber) ? `ep-${episodeNumber}` : null;
+  },
+
+  async getEpisodeServers(episodeId, animeId): Promise<EpisodeServer[]> {
+    const number = Number(/ep-(\d+)/.exec(episodeId)?.[1]);
+    if (!Number.isFinite(number) || !animeId) return [];
+    try {
+      const parsed = await loadParsed(animeId);
+      return parsed.availability.get(number) ?? [];
+    } catch {
+      return [];
+    }
+  },
+
+  async getStreamingSources(episodeId, serverId, animeId): Promise<VideoSource[]> {
+    const number = Number(/ep-(\d+)/.exec(episodeId)?.[1]);
+    const [provider, lang = "sub"] = (serverId ?? "").split(":");
+    if (!Number.isFinite(number) || !provider || !animeId) {
+      throw new ProviderError("Invalid episode/server reference.", 400);
+    }
+
+    const url = `${base()}/watch/${encodeURIComponent(provider)}/${encodeURIComponent(
+      animeId
+    )}/${encodeURIComponent(lang)}/${encodeURIComponent(provider)}-${number}`;
+
+    let json: any;
+    try {
+      const res = await fetchUpstream(url, {
+        headers: { accept: "application/json" },
+        timeoutMs: 45_000,
+        retries: 0,
+      } as RequestInit);
+      json = await res.json();
+    } catch (err) {
+      throw new ProviderError(
+        err instanceof Error ? `Extraction failed: ${err.message}` : "Extraction failed.",
+        502
+      );
+    }
+
+    const streams: any[] = Array.isArray(json?.streams) ? json.streams : [];
+    const sources: VideoSource[] = [];
+    const subtitles: SubtitleTrack[] = [];
+
+    for (const st of streams) {
+      // Subtitle collections may ride on any stream entry.
+      if (Array.isArray(st.subtitles)) {
+        for (const sub of st.subtitles) {
+          if (sub?.url) {
+            subtitles.push({
+              id: `sub-${subtitles.length}`,
+              label: String(sub.label ?? sub.lang ?? "Subtitle"),
+              language: String(sub.lang ?? sub.language ?? "en"),
+              url: String(sub.url),
+              kind: "subtitles",
+            });
+          }
+        }
+      }
+    }
+
+    // Direct media only — embed entries are rejected (ad-free guarantee).
+    streams.sort((a, b) => (Number(b.priority ?? 0) - Number(a.priority ?? 0)));
+    for (const st of streams) {
+      const srcUrl = String(st.url ?? "");
+      if (!srcUrl || st.type === "embed" || !isDirectMedia(srcUrl)) continue;
+      sources.push({
+        id: `${provider}-${sources.length}`,
+        name: String(st.server ?? PROVIDER_LABELS[provider] ?? provider),
+        url: srcUrl,
+        type: mediaTypeOf(srcUrl),
+        quality: st.quality ? String(st.quality) : undefined,
+        category: (json.audio ?? lang) as VideoSource["category"],
+        headers: st.referer ? { Referer: String(st.referer) } : undefined,
+        subtitles: subtitles.length ? subtitles : undefined,
+      });
+      // One quality-tier per server keeps the switcher clean; hls.js adapts.
+      break;
+    }
+
+    if (!sources.length) {
+      throw new ProviderError(
+        "This server only returned an embed player (unsupported) or failed to extract a direct stream.",
+        404
+      );
+    }
+    return sources;
+  },
+};

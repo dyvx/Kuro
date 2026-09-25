@@ -13,6 +13,11 @@ export type AnimeStatus =
   | "HIATUS";
 
 /** A direct, playable media stream. Embed pages are never accepted. */
+export interface TimeWindow {
+  start: number;
+  end: number;
+}
+
 export interface VideoSource {
   id: string;
   /** Human-facing server/source name, e.g. "Vidcloud". */
@@ -22,6 +27,12 @@ export interface VideoSource {
   quality?: string;
   subtitles?: SubtitleTrack[];
   headers?: Record<string, string>;
+  /** Audio track category when the provider distinguishes sub/dub. */
+  category?: "sub" | "dub" | "raw";
+  /** Opening theme window (seconds) for the Skip Intro feature, when known. */
+  intro?: TimeWindow;
+  /** Ending theme window (seconds) for the Skip Outro feature, when known. */
+  outro?: TimeWindow;
 }
 
 /** A selectable server slot for an episode. */
@@ -33,6 +44,8 @@ export interface EpisodeServer {
   embedOnly?: boolean;
   /** Availability hint from the provider, when known. */
   available?: boolean;
+  /** Audio category for providers with sub/dub server pools. */
+  category?: "sub" | "dub" | "raw";
 }
 
 export interface SubtitleTrack {
@@ -119,7 +132,7 @@ export interface SearchResult {
   hasNextPage: boolean;
 }
 
-export type ProviderId = "demo" | "consumet" | "anify";
+export type ProviderId = "demo" | "consumet" | "anify" | "anivexa";
 
 /** The provider contract every adapter implements. */
 export interface AnimeProvider {

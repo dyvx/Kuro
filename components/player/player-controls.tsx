@@ -24,11 +24,14 @@ import {
   Gauge,
   MonitorPlay,
   Keyboard,
+  FastForward,
 } from "lucide-react";
 import { useMediaState, type MediaPlayerInstance } from "@vidstack/react";
+import { useToast } from "@/components/ui/toast";
 import { formatTime } from "@/utils/cn";
 import { cn } from "@/utils/cn";
 import type { PlayerPrefs } from "@/lib/player/player-types";
+import type { TimeWindow } from "@/types/anime";
 
 interface ControlsProps {
   mediaRef: RefObject<MediaPlayerInstance | null>;
@@ -39,6 +42,10 @@ interface ControlsProps {
   animeTitle: string;
   quality?: string;
   sourceType?: string;
+  /** Stable id of the active source — resets auto-skip guards on switch. */
+  sourceKey?: string | null;
+  introWindow?: TimeWindow | null;
+  outroWindow?: TimeWindow | null;
   nextHref?: string | null;
 }
 
@@ -53,13 +60,39 @@ export function PlayerControls({
   animeTitle,
   quality,
   sourceType,
+  sourceKey,
+  introWindow,
+  outroWindow,
   nextHref,
 }: ControlsProps) {
+  const { toast } = useToast();
   const rootRef = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [visible, setVisible] = useState(true);
   const [menu, setMenu] = useState<"none" | "settings" | "quality" | "captions" | "shortcuts">("none");
   const [seekHover, setSeekHover] = useState<number | null>(null);
+
+  // Auto-skip guards — fire once per source until the window changes.
+  const autoFired = useRef<{ intro: string | null; outro: string | null }>({
+    intro: null,
+    outro: null,
+  });
+  useEffect(() => {
+    autoFired.current = { intro: null, outro: null };
+  }, [sourceKey]);
+
+  const skipIntroNow = useCallback(() => {
+    const p = mediaRef.current;
+    if (!p || !introWindow) return;
+    p.currentTime = introWindow.end;
+    autoFired.current.intro = sourceKey ?? "manual";
+  }, [mediaRef, introWindow, sourceKey]);
+
+  const goNextNow = useCallback(() => {
+    if (!nextHref) return;
+    autoFired.current.outro = sourceKey ?? "manual";
+    window.location.assign(nextHref);
+  }, [nextHref, sourceKey]);
 
   const player = mediaRef.current;
   const paused = useMediaState("paused", mediaRef);
@@ -73,6 +106,43 @@ export function PlayerControls({
   const waiting = useMediaState("waiting", mediaRef);
   const canPlay = useMediaState("canPlay", mediaRef);
   const textTracks = useMediaState("textTracks", mediaRef);
+
+  // Reactive auto-skip checks (currentTime re-renders this component).
+  useEffect(() => {
+    if (!canPlay) return;
+    const t = currentTime;
+    if (
+      prefs.autoSkipIntro &&
+      introWindow &&
+      autoFired.current.intro !== (sourceKey ?? "fired") &&
+      t >= introWindow.start &&
+      t < introWindow.end - 0.75
+    ) {
+      autoFired.current.intro = sourceKey ?? "fired";
+      const p = mediaRef.current;
+      if (p) p.currentTime = introWindow.end;
+    }
+    if (
+      prefs.autoSkipOutro &&
+      outroWindow &&
+      nextHref &&
+      autoFired.current.outro !== (sourceKey ?? "fired") &&
+      t >= outroWindow.start
+    ) {
+      autoFired.current.outro = sourceKey ?? "fired";
+      toast("Skipping outro — next episode…", "info", 2200);
+      window.location.assign(nextHref);
+    }
+  }, [currentTime, canPlay, prefs.autoSkipIntro, prefs.autoSkipOutro, introWindow, outroWindow, sourceKey, nextHref, mediaRef]);
+
+  const showSkipIntro =
+    Boolean(introWindow) &&
+    currentTime >= (introWindow?.start ?? 0) &&
+    currentTime <= (introWindow?.end ?? 0) - 0.75;
+  const inOutroWindow =
+    Boolean(outroWindow) && currentTime >= (outroWindow?.start ?? Infinity);
+  const nearEnd = duration > 0 && currentTime / duration > 0.93;
+  const showNext = Boolean(nextHref) && (inOutroWindow || nearEnd);
 
   const captionTracks = useMemo(
     () =>
@@ -293,6 +363,10 @@ export function PlayerControls({
           toggleMute();
           reveal();
           break;
+        case "s":
+          if (introWindow) skipIntroNow();
+          reveal();
+          break;
         case "f":
           toggleFullscreen();
           break;
@@ -314,10 +388,12 @@ export function PlayerControls({
     return () => window.removeEventListener("keydown", onKey);
   }, [
     changeVolume,
+    introWindow,
     mediaRef,
     reveal,
     seekBy,
     seekToRatio,
+    skipIntroNow,
     toggleCaptions,
     toggleFullscreen,
     toggleMute,
@@ -359,6 +435,31 @@ export function PlayerControls({
   const showBuffering = (waiting || (!canPlay && phase === "ready")) && phase === "ready";
 
   return (
+    <>
+      {/* Skip layer — visible independently of the auto-hiding control bar */}
+      {(showSkipIntro || showNext) && (
+        <div className="absolute bottom-[84px] right-3 z-20 flex flex-col items-end gap-2 sm:right-4 animate-fade-up">
+          {showSkipIntro && (
+            <button
+              onClick={skipIntroNow}
+              className="glass-strong group/skip flex min-h-[44px] items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold text-white shadow-card transition-all duration-200 ease-premium hover:border-primary-400/60 hover:text-primary-200 active:scale-95"
+            >
+              Skip Intro
+              <FastForward className="h-4 w-4 transition-transform group-hover/skip:translate-x-0.5" aria-hidden />
+            </button>
+          )}
+          {showNext && (
+            <button
+              onClick={goNextNow}
+              className="group/next flex min-h-[44px] items-center gap-2 rounded-2xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-glow transition-all duration-200 ease-premium hover:brightness-110 active:scale-95"
+            >
+              Next Episode
+              <SkipForward className="h-4 w-4 transition-transform group-hover/next:translate-x-0.5" aria-hidden />
+            </button>
+          )}
+        </div>
+      )}
+
     <div
       ref={rootRef}
       className={cn(
@@ -522,6 +623,10 @@ export function PlayerControls({
           onRate={setRate}
           autoplayNext={prefs.autoplayNext}
           onAutoplay={(v) => updatePrefs({ autoplayNext: v })}
+          autoSkipIntro={prefs.autoSkipIntro}
+          onAutoSkipIntro={(v) => updatePrefs({ autoSkipIntro: v })}
+          autoSkipOutro={prefs.autoSkipOutro}
+          onAutoSkipOutro={(v) => updatePrefs({ autoSkipOutro: v })}
           qualities={qualities}
           activeQualityId={activeQuality?.id}
           onQuality={selectQuality}
@@ -565,6 +670,7 @@ export function PlayerControls({
         </PopMenu>
       )}
     </div>
+    </>
   );
 }
 
@@ -664,6 +770,10 @@ function SettingsMenu({
   onRate,
   autoplayNext,
   onAutoplay,
+  autoSkipIntro,
+  onAutoSkipIntro,
+  autoSkipOutro,
+  onAutoSkipOutro,
   qualities,
   activeQualityId,
   onQuality,
@@ -673,6 +783,10 @@ function SettingsMenu({
   onRate: (r: number) => void;
   autoplayNext: boolean;
   onAutoplay: (v: boolean) => void;
+  autoSkipIntro: boolean;
+  onAutoSkipIntro: (v: boolean) => void;
+  autoSkipOutro: boolean;
+  onAutoSkipOutro: (v: boolean) => void;
   qualities: { id: string; height?: number; bitrate?: number; select?: () => void }[];
   activeQualityId?: string;
   onQuality: (q: { select?: () => void }) => void;
@@ -737,6 +851,30 @@ function SettingsMenu({
           type="checkbox"
           checked={autoplayNext}
           onChange={(e) => onAutoplay(e.target.checked)}
+          className="h-4 w-4 accent-[#8b5cf6]"
+        />
+      </label>
+      <label className="flex cursor-pointer items-center justify-between px-3 py-2.5">
+        <span className="flex items-center gap-2 text-sm text-txt">
+          <FastForward className="h-4 w-4 text-primary-300" aria-hidden />
+          Auto-skip intro
+        </span>
+        <input
+          type="checkbox"
+          checked={autoSkipIntro}
+          onChange={(e) => onAutoSkipIntro(e.target.checked)}
+          className="h-4 w-4 accent-[#8b5cf6]"
+        />
+      </label>
+      <label className="flex cursor-pointer items-center justify-between px-3 pb-1">
+        <span className="flex items-center gap-2 text-sm text-txt">
+          <FastForward className="h-4 w-4 text-primary-300" aria-hidden />
+          Auto-skip outro
+        </span>
+        <input
+          type="checkbox"
+          checked={autoSkipOutro}
+          onChange={(e) => onAutoSkipOutro(e.target.checked)}
           className="h-4 w-4 accent-[#8b5cf6]"
         />
       </label>

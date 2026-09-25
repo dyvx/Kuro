@@ -53,7 +53,7 @@ Out of the box the app runs in **demo mode**: a bundled catalog (factual metadat
 | --- | --- | --- |
 | `MONGODB_URI` | no* | MongoDB Atlas connection string. *If empty, an in-memory store is used (resets on restart).* |
 | `DATABASE_NAME` | no | Database name (default `kuro`) |
-| `ANIME_PROVIDER` | no | `demo` (default) · `consumet` · `anify` |
+| `ANIME_PROVIDER` | no | `demo` (default) · `anivexa` · `consumet` · `anify` |
 | `ANIME_API_BASE_URL` | for consumet/anify | Your Consumet instance (e.g. `http://localhost:4100`) or `https://api.anify.it` |
 | `ANIME_API_KEY` | no | API key for Anify deployments that require one |
 | `CONSUMET_STREAMING_PROVIDER` | no | Consumet streaming provider to extract from (default `gogoanime`) |
@@ -83,10 +83,30 @@ Adapters live in `lib/anime/providers/`:
 
 ```
 demo/      bundled offline catalog (default — no keys needed)
+anilist.ts   direct AniList GraphQL client (metadata, no key needed)
+anivexa.ts   AniList metadata + your Anivexa-API instance for streams
+             (14 providers, SUB/DUB server pools, direct .m3u8 only)
 consumet.ts  Consumet API (AniList metadata + gogoanime/zoro extraction)
-anify.ts     Anify API (experimental)
+anify.ts     Anify API (project discontinued — kept for reference)
 index.ts     registry — switching providers is one env var
 ```
+
+### Anivexa setup (real streams, sub & dub)
+
+1. Host [Anivexa-API](https://github.com/walterwhite-69/Anivexa-API) yourself —
+   **Render/Railway/VPS recommended** (the author warns Vercel's shared IPs are
+   blocked by most providers). It runs plain Node: `npm install && node server.js`.
+2. Point KURO at it:
+
+```env
+ANIME_PROVIDER=anivexa
+ANIME_API_BASE_URL=https://your-anivexa.onrender.com
+```
+
+KURO then merges AniList discovery (trending, search, details) with Anivexa's
+per-provider episode pools: every provider × audio track becomes a server in
+the switcher (grouped under SUB / DUB tabs), and only direct `.m3u8`/`.mp4`
+streams are ever handed to the player — `type: "embed"` responses are dropped.
 
 The Consumet adapter **aggressively filters for direct media URLs** (`isDirectMedia`): `.m3u8` / `.mp4` responses are kept; iframe/embed pages are flagged `embedOnly` and removed from the server switcher, keeping the app ad-free.
 
@@ -124,7 +144,15 @@ npm run typecheck && npm run lint && npm run build
 
 ## 🎮 Player reference
 
-**Keyboard:** `Space`/`K` play · `←`/`→` ±5s · `J`/`L` ±10s · `↑`/`↓` volume · `M` mute · `F` fullscreen · `P` PiP · `C` captions · `0–9` seek to %
+**Keyboard:** `Space`/`K` play · `←`/`→` ±5s · `J`/`L` ±10s · `↑`/`↓` volume · `M` mute · `F` fullscreen · `P` PiP · `C` captions · `S` skip intro · `0–9` seek to %
+
+**Skip suite:** a **Skip Intro** pill appears during the opening window and a
+**Next Episode** pill during the ending window (when the provider reports
+`intro`/`outro` timestamps — falling back gracefully when absent). Auto-skip
+for both, plus autoplay-next, are toggleable in the player settings menu and
+persisted per device. Server switching preserves position, speed, volume and
+caption language; failed servers are marked & disabled for manual recovery
+(never auto-switched).
 
 **Server switching:** position, playback rate, volume, mute, caption language and fullscreen are preserved. The player seeks back after the swap and resumes playback automatically. A failed server shows the manual-recovery overlay + toast and is disabled for the rest of the session — **the app never auto-switches or retries a failed source**.
 

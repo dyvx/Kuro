@@ -377,6 +377,9 @@ export function PlayerShell(props: Props) {
           animeTitle={props.animeTitle}
           quality={source?.quality}
           sourceType={source?.type}
+          sourceKey={source?.id ?? null}
+          introWindow={source?.intro ?? null}
+          outroWindow={source?.outro ?? null}
           nextHref={props.nextHref}
         />
 

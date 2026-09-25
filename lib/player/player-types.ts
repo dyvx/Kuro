@@ -13,6 +13,10 @@ export interface PlayerPrefs {
   rate: number;
   captionsLang: string | null;
   autoplayNext: boolean;
+  /** Jump past the opening theme automatically. */
+  autoSkipIntro: boolean;
+  /** Trigger next episode when the ending theme starts. */
+  autoSkipOutro: boolean;
 }
 
 export const DEFAULT_PREFS: PlayerPrefs = {
@@ -21,6 +25,8 @@ export const DEFAULT_PREFS: PlayerPrefs = {
   rate: 1,
   captionsLang: null,
   autoplayNext: true,
+  autoSkipIntro: true,
+  autoSkipOutro: true,
 };
 
 export function preferredServerKey(provider: string, animeId: string): string {
