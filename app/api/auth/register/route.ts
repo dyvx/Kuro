@@ -36,6 +36,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[kuro] register failed:", err);
-    return NextResponse.json({ error: "Could not create the account. Please try again." }, { status: 500 });
+    // Distinguish "database unreachable" so admins get an actionable hint
+    // instead of a generic retry message.
+    const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    const dbDown = /MongoServerError|bad auth|ENOTFOUND|ETIMEDOUT|querySrv|MONGODB_URI/i.test(msg);
+    return NextResponse.json(
+      {
+        error: dbDown
+          ? "The account database isn't reachable right now. Fix the MongoDB credentials (MONGODB_URI) in your hosting settings and redeploy."
+          : "Could not create the account. Please try again.",
+        code: dbDown ? "db_unreachable" : "internal",
+      },
+      { status: dbDown ? 503 : 500 },
+    );
   }
 }
