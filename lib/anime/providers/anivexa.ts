@@ -22,6 +22,7 @@ import {
   anilistPage,
 } from "./anilist";
 import { getSkipTimes, type SkipWindows } from "@/lib/skip";
+import { consumetConfigured, consumetEpisode, consumetSources } from "./consumet-stream";
 
 /* ────────────────────────────────────────────────────────────────
    ANIVEXA ADAPTER
@@ -48,6 +49,7 @@ const PROVIDER_ORDER = [
 ] as const;
 
 const PROVIDER_LABELS: Record<string, string> = {
+  consumet: "Consumet",
   anizone: "AniZone",
   animegg: "AnimeGG",
   anikoto: "AniKoto",
@@ -177,6 +179,46 @@ function parsedFromDTO(d: StoredParsed): ParsedEpisodes {
   };
 }
 
+/** Consumet streams shaped like Anivexa `streams` entries so both paths
+    share the same proxy + skip-window build inside getStreamingSources. */
+async function consumetStreamsShaped(
+  animeId: string,
+  number: number,
+  lang: "sub" | "dub"
+): Promise<any[]> {
+  const info = await consumetEpisode(animeId, number, lang);
+  if (!info?.episodeId) {
+    throw new ProviderError("Consumet has no stream for this episode.", 404);
+  }
+  const sources = await consumetSources(info.episodeId);
+  return sources.map((s, i) => ({
+    url: s.url,
+    quality: s.quality,
+    server: `Consumet · ${lang.toUpperCase()}`,
+    referer: s.referer,
+    hls: s.type === "hls",
+    priority: -i,
+  }));
+}
+
+async function consumetHasEpisodeSafe(animeId: string, number: number): Promise<boolean> {
+  try {
+    const info = await consumetEpisode(animeId, number, "sub");
+    return Boolean(info?.exists);
+  } catch {
+    return false;
+  }
+}
+
+/** "Best source for this anime" memory: Anivexa is preferred; when it
+    fails and Consumet rescues the episode, the preference flips to
+    Consumet for 7 days (servers list order + default pick). */
+async function markStreamPref(animeId: string, pref: "anivexa" | "consumet"): Promise<void> {
+  try {
+    await cacheSet(`streampref:${animeId}`, pref, 7 * 24 * 3600);
+  } catch { /* memory only — never fatal */ }
+}
+
 export const anivexaProvider: AnimeProvider = {
   id: "anivexa",
   displayName: "Anivexa",
@@ -246,12 +288,34 @@ export const anivexaProvider: AnimeProvider = {
   async getEpisodeServers(episodeId, animeId): Promise<EpisodeServer[]> {
     const number = Number(/ep-(\d+)/.exec(episodeId)?.[1]);
     if (!Number.isFinite(number) || !animeId) return [];
+    let servers: EpisodeServer[] = [];
     try {
       const parsed = await loadParsed(animeId);
-      return parsed.availability.get(number) ?? [];
+      servers = [...(parsed.availability.get(number) ?? [])];
     } catch {
-      return [];
+      servers = [];
     }
+    // Consumet shows up as an extra server when configured. Budget-capped
+    // so a slow Consumet instance can never slow the servers list down.
+    if (consumetConfigured()) {
+      try {
+        const has = await Promise.race([
+          consumetHasEpisodeSafe(animeId, number),
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
+        ]);
+        if (has) {
+          const entry: EpisodeServer = {
+            id: "consumet:sub",
+            name: "Consumet · SUB",
+            available: true,
+            category: "sub",
+          };
+          const pref = await cacheGet<string>(`streampref:${animeId}`).catch(() => null);
+          servers = pref === "consumet" ? [entry, ...servers] : [...servers, entry];
+        }
+      } catch { /* enhancement only */ }
+    }
+    return servers;
   },
 
   async getStreamingSources(episodeId, serverId, animeId): Promise<VideoSource[]> {
@@ -280,15 +344,37 @@ export const anivexaProvider: AnimeProvider = {
       }
     })();
 
+    // When the user explicitly picked a Consumet server (or Anivexa is being
+    // auto-failed-over), streams come from Consumet instead of /watch.
+    const consumetRequested = provider === "consumet";
+
     let json: any;
     try {
-      const res = await fetchUpstream(url, {
-        headers: { accept: "application/json" },
-        timeoutMs: 55_000,
-        retries: 0,
-      } as RequestInit);
-      json = await res.json();
+      if (consumetRequested) {
+        json = {
+          streams: await consumetStreamsShaped(animeId, number, lang === "dub" ? "dub" : "sub"),
+          audio: lang,
+        };
+      } else {
+        const res = await fetchUpstream(url, {
+          headers: { accept: "application/json" },
+          timeoutMs: 55_000,
+          retries: 0,
+        } as RequestInit);
+        json = await res.json();
+      }
     } catch (err) {
+      // AUTO-FAILOVER ("pick the best source for this anime"): when Anivexa
+      // cannot serve an episode and a Consumet instance is configured, try
+      // it once and remember it as this anime's preferred source for 7 days.
+      // Pure enhancement — without ANIME_CONSUMET_BASE_URL nothing changes.
+      if (!consumetRequested && consumetConfigured()) {
+        try {
+          const fallback = await this.getStreamingSources(episodeId, "consumet:sub", animeId);
+          void markStreamPref(animeId, "consumet");
+          return fallback;
+        } catch { /* fall through to the original error */ }
+      }
       throw new ProviderError(
         err instanceof Error ? `Extraction failed: ${err.message}` : "Extraction failed.",
         502
@@ -320,7 +406,7 @@ export const anivexaProvider: AnimeProvider = {
     streams.sort((a, b) => (Number(b.priority ?? 0) - Number(a.priority ?? 0)));
     for (const st of streams) {
       const srcUrl = String(st.url ?? "");
-      if (!srcUrl || st.type === "embed" || !isDirectMedia(srcUrl)) continue;
+      if (!srcUrl || st.type === "embed" || (!isDirectMedia(srcUrl) && !st.hls)) continue;
 
       // Provider CDNs typically lock CORS to their own player and serve
       // decoys to other origins. Route playback through our own /api/stream
@@ -335,7 +421,7 @@ export const anivexaProvider: AnimeProvider = {
         name: String(st.server ?? PROVIDER_LABELS[provider] ?? provider),
         url: playUrl,
         originalUrl: srcUrl,
-        type: mediaTypeOf(srcUrl),
+        type: st.hls ? "hls" : mediaTypeOf(srcUrl),
         quality: st.quality ? String(st.quality) : undefined,
         category: (json.audio ?? lang) as VideoSource["category"],
         headers: referer ? { Referer: referer } : undefined,
@@ -346,6 +432,13 @@ export const anivexaProvider: AnimeProvider = {
     }
 
     if (!sources.length) {
+      if (!consumetRequested && consumetConfigured()) {
+        try {
+          const fallback = await this.getStreamingSources(episodeId, "consumet:sub", animeId);
+          void markStreamPref(animeId, "consumet");
+          return fallback;
+        } catch { /* fall through to the original error */ }
+      }
       throw new ProviderError(
         "This server only returned an embed player (unsupported) or failed to extract a direct stream.",
         404
@@ -365,6 +458,15 @@ export const anivexaProvider: AnimeProvider = {
       }
     } catch {
       /* skip data must never break source resolution */
+    }
+    // Anivexa served this episode → it is the "best source" again.
+    if (!consumetRequested) {
+      void cacheGet<string>(`streampref:${animeId}`)
+        .then((pref) => {
+          if (pref === "consumet") return markStreamPref(animeId, "anivexa");
+          return undefined;
+        })
+        .catch(() => undefined);
     }
     return sources;
   },
