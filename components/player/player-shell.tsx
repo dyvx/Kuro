@@ -12,7 +12,7 @@ import {
   type MediaProviderAdapter,
   type MediaPlayerInstance,
 } from "@vidstack/react";
-import { AlertTriangle, LoaderCircle, RotateCw } from "lucide-react";
+import { AlertTriangle, LoaderCircle, RotateCw, SkipForward } from "lucide-react";
 import { PlayerControls } from "./player-controls";
 import { ServerSwitcher } from "./server-switcher";
 import { SourceManager } from "@/lib/player/source-manager";
@@ -66,6 +66,9 @@ export function PlayerShell(props: Props) {
 
   // Pending hand-off across a server switch / resume.
   const pendingSeek = useRef<number | null>(null);
+  /** One automatic retry per server×episode — covers transient blips
+      and freshly-expired CDN tokens without masking real failures. */
+  const retriedOnce = useRef<Set<string>>(new Set());
   const pendingPlay = useRef(false);
   const resumedForEpisode = useRef(false);
   const savedPosition = useRef(0);
@@ -182,20 +185,54 @@ export function PlayerShell(props: Props) {
       setMediaError(null);
       setPhase("loading-source");
       try {
-        const sources = await manager.getSources(props.episodeId, serverId);
+        // Hard ceiling so the player can never hang on a stuck provider.
+        const sources = await Promise.race([
+          manager.getSources(props.episodeId, serverId),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 65_000)),
+        ]);
         const first = sources[0] ?? null;
         if (!first) throw new Error("no direct source");
         setSource(first);
         manager.rememberPreferredServer(serverId);
       } catch {
-        // Spec §4 — detect failure, stop spinner, show overlay + toast,
-        // do NOT auto-switch. Wait for a manual server click.
+        // One silent retry (fresh source fetch) for transient blips.
+        const key = `${serverId}:${props.episodeId}`;
+        if (!retriedOnce.current.has(key)) {
+          retriedOnce.current.add(key);
+          try {
+            const sources = await manager.getSources(props.episodeId, serverId);
+            const first = sources[0] ?? null;
+            if (first) {
+              setSource(first);
+              manager.rememberPreferredServer(serverId);
+              return;
+            }
+          } catch {
+            /* fall through to the honest failure state */
+          }
+        }
+        // Failure: mark it, stop the spinner, show the recovery overlay.
+        // No silent auto-switching unless the user opted in.
         markFailed(serverId);
         setPhase("failed");
-        toast("Server failed. Please choose another.", "error");
+        toast("This server isn't responding.", "error");
+        if (prefsRef.current.autoTryNextServer) tryNextServer(serverId);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [manager, markFailed, props.episodeId, toast]
+  );
+
+  /** First usable server that isn't the failing one (manual or opt-in auto). */
+  const tryNextServer = useCallback(
+    (failedServerId?: string | null) => {
+      const candidate = servers.find(
+        (s) => s.id !== (failedServerId ?? activeServerId) && !failedIds.has(s.id) && s.available !== false
+      );
+      if (candidate) loadServer(candidate.id, { keepPosition: true });
+      else toast("No other servers available — try again shortly.", "info");
+    },
+    [servers, failedIds, activeServerId, loadServer, toast]
   );
 
   // Resolve servers whenever the episode changes.
@@ -296,13 +333,22 @@ export function PlayerShell(props: Props) {
   const onMediaError = useCallback(
     (detail: MediaErrorDetail | null) => {
       if (!activeServerId) return;
-      // Spec §4 — playback failure: mark server, overlay + toast, no auto-switch.
+      // The manifest may have expired mid-playback — one fresh re-resolve
+      // of the SAME server before we call it dead.
+      const key = `${activeServerId}:${props.episodeId}`;
+      if (!retriedOnce.current.has(key)) {
+        retriedOnce.current.add(key);
+        setPhase("loading-source");
+        loadServer(activeServerId, { keepPosition: true });
+        return;
+      }
       markFailed(activeServerId);
       setPhase("failed");
       setMediaError(detail?.message || "The stream failed to load.");
-      toast("Server failed. Please choose another.", "error");
+      toast("This server isn't responding.", "error");
+      if (prefsRef.current.autoTryNextServer) tryNextServer(activeServerId);
     },
-    [activeServerId, markFailed, toast]
+    [activeServerId, markFailed, toast, props.episodeId, loadServer, tryNextServer]
   );
 
   const onEnded = useCallback(() => {
@@ -402,10 +448,18 @@ export function PlayerShell(props: Props) {
                 This server is currently unavailable.
               </p>
               <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-txt-muted">
-                Please select another server below.
+                Pick another server below, or let KURO pick the next one for you.
                 {mediaError ? <span className="block text-xs text-txt-faint">{mediaError}</span> : null}
               </p>
             </div>
+            <button
+              onClick={() => tryNextServer(activeServerId)}
+              disabled={!servers.some((sv) => sv.id !== activeServerId && !failedIds.has(sv.id) && sv.available !== false)}
+              className="inline-flex h-11 items-center gap-2 rounded-2xl bg-brand-gradient px-6 text-sm font-bold text-white shadow-glow transition-all hover:brightness-110 active:scale-95 disabled:opacity-40"
+            >
+              <SkipForward className="h-4 w-4" aria-hidden />
+              Try next server
+            </button>
           </div>
         )}
 
@@ -413,7 +467,9 @@ export function PlayerShell(props: Props) {
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-ink-950/90">
             <LoaderCircle className="h-10 w-10 animate-spin text-primary-400" aria-hidden />
             <p className="text-sm font-medium text-txt-muted">
-              {phase === "loading-servers" ? "Finding available servers…" : "Connecting to server…"}
+              {phase === "loading-servers"
+                ? "Finding available servers…"
+                : `Connecting to ${servers.find((sv) => sv.id === activeServerId)?.name ?? "server"}…` }
             </p>
           </div>
         )}

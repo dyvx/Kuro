@@ -44,6 +44,7 @@ export async function POST(req: Request) {
   }
   const store = getStore();
   try {
+    const prev = await store.getProgress(userId, String(body.animeId));
     const saved = await store.upsertProgress(userId, {
       animeId: String(body.animeId),
       animeTitle: String(body.animeTitle ?? "Unknown"),
@@ -54,6 +55,23 @@ export async function POST(req: Request) {
       position: Math.max(0, num(body.position)),
       duration: Math.max(0, num(body.duration)),
     });
+
+    // Activity ledger (one compact doc/user/day) + achievement evaluation.
+    // Fire-and-forget: playback must never wait on gamification.
+    const advancedEpisode = prev ? saved.episodeNumber > prev.episodeNumber : true;
+    void store
+      .recordActivity(userId, { hour: new Date().getHours(), newEpisode: advancedEpisode })
+      .then(() => import("@/lib/stats").then((s) => s.invalidateStatsCache(userId)))
+      .then(() => {
+        const g = globalThis as unknown as { __kuroAchEval?: Map<string, number> };
+        g.__kuroAchEval ??= new Map();
+        const last = g.__kuroAchEval.get(userId) ?? 0;
+        if (Date.now() - last < 20_000) return; // throttle re-evaluation
+        g.__kuroAchEval.set(userId, Date.now());
+        return import("@/lib/achievements").then((m) => m.evaluateAchievements(userId, store));
+      })
+      .catch(() => {});
+
     return NextResponse.json({ progress: saved });
   } catch (err) {
     console.error("[kuro] progress POST failed:", err);
@@ -70,6 +88,8 @@ export async function DELETE(req: Request) {
   const store = getStore();
   try {
     await store.deleteProgress(userId, animeId);
+    const { invalidateStatsCache } = await import("@/lib/stats");
+    invalidateStatsCache(userId);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[kuro] progress DELETE failed:", err);

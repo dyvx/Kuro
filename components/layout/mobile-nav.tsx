@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, Bookmark, Clock, Compass, Home, Search, User } from "lucide-react";
+import { Bookmark, Clock, Compass, Home, Search, User } from "lucide-react";
 import { cn } from "@/utils/cn";
 
 /* Mobile gets its own carefully designed chrome: a bottom tab bar
@@ -12,7 +12,6 @@ const TABS = [
   { href: "/", label: "Home", icon: Home, exact: true },
   { href: "/browse", label: "Browse", icon: Compass },
   { href: "/search", label: "Search", icon: Search },
-  { href: "/ai", label: "AI", icon: Bot },
   { href: "/watchlist", label: "Watchlist", icon: Bookmark },
   { href: "/profile", label: "Profile", icon: User },
 ];

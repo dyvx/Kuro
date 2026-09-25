@@ -108,37 +108,6 @@ per-provider episode pools: every provider × audio track becomes a server in
 the switcher (grouped under SUB / DUB tabs), and only direct `.m3u8`/`.mp4`
 streams are ever handed to the player — `type: "embed"` responses are dropped.
 
-### KURO AI (built-in assistant)
-
-`/ai` is a first-class nav tab with a conversational assistant that queries the **real** platform:
-catalog search, details, episodes, watch history, continue-watching, watchlist, favorites and a
-minimal per-user AI memory (inspectable + clearable). Anime results render as native cards with
-working Play/View buttons; the assistant can never invent ids or availability because all cards are
-resolved server-side from the catalog before the client sees them.
-
-It is **provider-agnostic** — configure any OpenAI-compatible endpoint:
-
-```
-AI_BASE_URL=https://your-provider.example.com/v1
-AI_API_KEY=...
-AI_MODEL=your-model
-AI_PROVIDER_NAME=My Provider
-AI_ADMIN_EMAILS=you@example.com   # enables Profile → AI Settings
-```
-
-Requests flow: client → `/api/ai/chat` (auth-aware, rate-limited) → tool loop (validated tools,
-server-side keys, trimmed results) → structured response (`text` + verified `animeResults`).
-Admins can override everything in Profile → AI Settings (stored in MongoDB `ai_settings`).
-
-**Stream proxy (`/api/stream`)** — provider CDNs lock CORS to their own embed
-players and serve decoy responses to foreign origins, so direct browser
-playback is impossible. KURO therefore routes all media through its own
-origin: the proxy fetches upstream server-side with the provider's required
-`Referer`, sniffs the payload (CDNs mislabel playlists as `image/jpeg`),
-rewrites every HLS URI to stay inside the proxy, passes byte `Range` headers
-through for seeking, and 502s obvious decoys. The player only ever talks to
-same-origin URLs; no iframes, no third-party player pages.
-
 The Consumet adapter **aggressively filters for direct media URLs** (`isDirectMedia`): `.m3u8` / `.mp4` responses are kept; iframe/embed pages are flagged `embedOnly` and removed from the server switcher, keeping the app ad-free.
 
 ### Using a self-hosted Consumet instance

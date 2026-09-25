@@ -25,6 +25,7 @@ import {
   MonitorPlay,
   Keyboard,
   FastForward,
+  Server,
 } from "lucide-react";
 import { useMediaState, type MediaPlayerInstance } from "@vidstack/react";
 import { useToast } from "@/components/ui/toast";
@@ -627,6 +628,8 @@ export function PlayerControls({
           onAutoSkipIntro={(v) => updatePrefs({ autoSkipIntro: v })}
           autoSkipOutro={prefs.autoSkipOutro}
           onAutoSkipOutro={(v) => updatePrefs({ autoSkipOutro: v })}
+          autoTryNextServer={prefs.autoTryNextServer}
+          onAutoTryNextServer={(v) => updatePrefs({ autoTryNextServer: v })}
           qualities={qualities}
           activeQualityId={activeQuality?.id}
           onQuality={selectQuality}
@@ -774,6 +777,8 @@ function SettingsMenu({
   onAutoSkipIntro,
   autoSkipOutro,
   onAutoSkipOutro,
+  autoTryNextServer,
+  onAutoTryNextServer,
   qualities,
   activeQualityId,
   onQuality,
@@ -787,6 +792,8 @@ function SettingsMenu({
   onAutoSkipIntro: (v: boolean) => void;
   autoSkipOutro: boolean;
   onAutoSkipOutro: (v: boolean) => void;
+  autoTryNextServer: boolean;
+  onAutoTryNextServer: (v: boolean) => void;
   qualities: { id: string; height?: number; bitrate?: number; select?: () => void }[];
   activeQualityId?: string;
   onQuality: (q: { select?: () => void }) => void;
@@ -875,6 +882,18 @@ function SettingsMenu({
           type="checkbox"
           checked={autoSkipOutro}
           onChange={(e) => onAutoSkipOutro(e.target.checked)}
+          className="h-4 w-4 accent-[#8b5cf6]"
+        />
+      </label>
+      <label className="flex cursor-pointer items-center justify-between border-t border-line px-3 py-2.5">
+        <span className="flex items-center gap-2 pr-2 text-sm text-txt">
+          <Server className="h-4 w-4 shrink-0 text-primary-300" aria-hidden />
+          Auto-try next server on failure
+        </span>
+        <input
+          type="checkbox"
+          checked={autoTryNextServer}
+          onChange={(e) => onAutoTryNextServer(e.target.checked)}
           className="h-4 w-4 accent-[#8b5cf6]"
         />
       </label>

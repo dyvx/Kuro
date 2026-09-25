@@ -17,6 +17,8 @@ export interface PlayerPrefs {
   autoSkipIntro: boolean;
   /** Trigger next episode when the ending theme starts. */
   autoSkipOutro: boolean;
+  /** Opt-in: on server failure, automatically try the next server once. */
+  autoTryNextServer: boolean;
 }
 
 export const DEFAULT_PREFS: PlayerPrefs = {
@@ -27,6 +29,7 @@ export const DEFAULT_PREFS: PlayerPrefs = {
   autoplayNext: true,
   autoSkipIntro: true,
   autoSkipOutro: true,
+  autoTryNextServer: false,
 };
 
 export function preferredServerKey(provider: string, animeId: string): string {

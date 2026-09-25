@@ -39,5 +39,9 @@ export async function ensureIndexes() {
     db.collection("watchlist").createIndex({ userId: 1, animeId: 1 }, { unique: true }),
     db.collection("favorites").createIndex({ userId: 1, animeId: 1 }, { unique: true }),
     db.collection("reports").createIndex({ createdAt: -1 }),
+    db.collection("user_profiles").createIndex({ userId: 1 }, { unique: true }),
+    db.collection("user_profiles").createIndex({ username: 1 }, { unique: true, sparse: true }),
+    db.collection("user_activity").createIndex({ userId: 1, day: 1 }, { unique: true }),
+    db.collection("user_achievements").createIndex({ userId: 1 }, { unique: true }),
   ]);
 }

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Bot, Compass, LayoutGrid, Search, Sparkles } from "lucide-react";
+import { Compass, LayoutGrid, Search, Sparkles } from "lucide-react";
 import { Logo } from "./logo";
 import { SearchBar } from "./search-bar";
 import { UserMenu } from "./user-menu";
@@ -14,7 +14,6 @@ const LINKS = [
   { href: "/", label: "Home", icon: Sparkles },
   { href: "/browse", label: "Browse", icon: LayoutGrid },
   { href: "/genres", label: "Genres", icon: Compass },
-  { href: "/ai", label: "AI", icon: Bot },
 ];
 
 export function Navbar() {

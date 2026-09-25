@@ -53,6 +53,35 @@ export interface StoredReport {
   createdAt: string;
 }
 
+export interface UserProfile {
+  userId: string;
+  /** Unique handle shown as @username. */
+  username: string;
+  displayName: string;
+  bio: string;
+  /** Small client-resized data-URL avatar (≤256px) — no external storage. */
+  avatar: string | null;
+  /** KURO accent: one of a fixed premium palette. */
+  accent: string;
+  updatedAt: string;
+}
+
+/** One doc per user per local day — powers streaks / night-owl / binge
+    achievements without logging every playback second. */
+export interface UserActivityDay {
+  userId: string;
+  day: string; // YYYY-MM-DD
+  hours: number[]; // distinct watch hours 0-23
+  episodes: number; // saves that advanced to a new episode
+  updatedAt: string;
+}
+
+export interface UserAchievementRecord {
+  userId: string;
+  unlocked: Record<string, string>; // achievementId -> ISO unlock date
+  updatedAt: string;
+}
+
 export interface ProgressInput {
   animeId: string;
   animeTitle: string;
@@ -83,6 +112,13 @@ export interface DataStore {
   addFavorite(userId: string, item: Omit<StoredLibraryItem, "userId" | "addedAt">): Promise<void>;
   removeFavorite(userId: string, animeId: string): Promise<void>;
   addReport(report: StoredReport): Promise<void>;
+  getProfile(userId: string): Promise<UserProfile | null>;
+  updateProfile(userId: string, patch: Partial<Omit<UserProfile, "userId">>): Promise<UserProfile | null>;
+  isUsernameTaken(username: string, exceptUserId: string): Promise<boolean>;
+  recordActivity(userId: string, opts: { hour: number; newEpisode: boolean }): Promise<void>;
+  listActivity(userId: string, days?: number): Promise<UserActivityDay[]>;
+  getAchievementRecord(userId: string): Promise<UserAchievementRecord | null>;
+  saveAchievementRecord(userId: string, unlocked: Record<string, string>): Promise<void>;
   ping(): Promise<boolean>;
 }
 
@@ -191,6 +227,62 @@ const mongoStore: DataStore = {
     const db = await getDb();
     await db.collection("reports").insertOne({ ...report } as unknown as Record<string, unknown>);
   },
+  async getProfile(userId) {
+    const db = await getDb();
+    const r = await db.collection("user_profiles").findOne({ userId });
+    return (r as unknown as UserProfile) ?? null;
+  },
+  async updateProfile(userId, patch) {
+    const db = await getDb();
+    const now = new Date().toISOString();
+    await db.collection("user_profiles").updateOne(
+      { userId },
+      { $set: { ...patch, updatedAt: now } },
+      { upsert: true },
+    );
+    return this.getProfile(userId);
+  },
+  async isUsernameTaken(username, exceptUserId) {
+    const db = await getDb();
+    const r = await db.collection("user_profiles").findOne({ username, userId: { $ne: exceptUserId } });
+    return Boolean(r);
+  },
+  async recordActivity(userId, opts) {
+    const db = await getDb();
+    const now = new Date();
+    const day = now.toISOString().slice(0, 10);
+    await db.collection("user_activity").updateOne(
+      { userId, day },
+      {
+        $set: { updatedAt: now.toISOString() },
+        $addToSet: { hours: opts.hour },
+        ...(opts.newEpisode ? { $inc: { episodes: 1 } } : {}),
+      },
+      { upsert: true },
+    );
+  },
+  async listActivity(userId, days = 120) {
+    const db = await getDb();
+    const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+    const rows = await db
+      .collection("user_activity")
+      .find({ userId, day: { $gte: since } })
+      .toArray();
+    return rows.map((r) => r as unknown as UserActivityDay);
+  },
+  async getAchievementRecord(userId) {
+    const db = await getDb();
+    const r = await db.collection("user_achievements").findOne({ userId });
+    return (r as unknown as UserAchievementRecord) ?? null;
+  },
+  async saveAchievementRecord(userId, unlocked) {
+    const db = await getDb();
+    await db.collection("user_achievements").updateOne(
+      { userId },
+      { $set: { unlocked, updatedAt: new Date().toISOString() } },
+      { upsert: true },
+    );
+  },
   async ping() {
     const db = await getDb();
     await db.command({ ping: 1 });
@@ -206,11 +298,23 @@ interface MemoryDB {
   watchlist: Map<string, StoredLibraryItem>;
   favorites: Map<string, StoredLibraryItem>;
   reports: StoredReport[];
+  profiles: Map<string, UserProfile>;
+  activity: Map<string, UserActivityDay>;
+  achievements: Map<string, UserAchievementRecord>;
 }
 
 const g = globalThis as unknown as { __kuroMemory?: MemoryDB };
 const mem: MemoryDB =
-  g.__kuroMemory ?? { users: new Map(), progress: new Map(), watchlist: new Map(), favorites: new Map(), reports: [] };
+  g.__kuroMemory ?? {
+    users: new Map(),
+    progress: new Map(),
+    watchlist: new Map(),
+    favorites: new Map(),
+    reports: [],
+    profiles: new Map(),
+    activity: new Map(),
+    achievements: new Map(),
+  };
 g.__kuroMemory = mem;
 
 const pkey = (userId: string, animeId: string) => `${userId}::${animeId}`;
@@ -276,6 +380,48 @@ const memoryStore: DataStore = {
   },
   async addReport(report) {
     mem.reports.push(report);
+  },
+  async getProfile(userId) {
+    return mem.profiles.get(userId) ?? null;
+  },
+  async updateProfile(userId, patch) {
+    const prev = mem.profiles.get(userId);
+    const next: UserProfile = {
+      userId,
+      username: patch.username ?? prev?.username ?? "",
+      displayName: patch.displayName ?? prev?.displayName ?? "",
+      bio: patch.bio ?? prev?.bio ?? "",
+      avatar: patch.avatar !== undefined ? patch.avatar ?? null : prev?.avatar ?? null,
+      accent: patch.accent ?? prev?.accent ?? "violet",
+      updatedAt: new Date().toISOString(),
+    };
+    mem.profiles.set(userId, next);
+    return next;
+  },
+  async isUsernameTaken(username, exceptUserId) {
+    for (const p of Array.from(mem.profiles.values())) {
+      if (p.username === username && p.userId !== exceptUserId) return true;
+    }
+    return false;
+  },
+  async recordActivity(userId, opts) {
+    const day = new Date().toISOString().slice(0, 10);
+    const key = `${userId}:${day}`;
+    const prev = mem.activity.get(key) ?? { userId, day, hours: [], episodes: 0, updatedAt: new Date().toISOString() };
+    if (!prev.hours.includes(opts.hour)) prev.hours.push(opts.hour);
+    if (opts.newEpisode) prev.episodes += 1;
+    prev.updatedAt = new Date().toISOString();
+    mem.activity.set(key, prev);
+  },
+  async listActivity(userId, days = 120) {
+    const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+    return Array.from(mem.activity.values()).filter((a) => a.userId === userId && a.day >= since);
+  },
+  async getAchievementRecord(userId) {
+    return mem.achievements.get(userId) ?? null;
+  },
+  async saveAchievementRecord(userId, unlocked) {
+    mem.achievements.set(userId, { userId, unlocked, updatedAt: new Date().toISOString() });
   },
   async ping() {
     return true;
